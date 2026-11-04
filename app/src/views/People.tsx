@@ -38,7 +38,7 @@ import {
 } from '../ui/kit';
 import { ask, sheet, toast } from '../ui/overlay';
 import { Page } from '../ui/Page';
-import { startDm } from './Chat';
+import { startDm } from '../lib/actions';
 import { ContractInfo, PayCard } from './Me';
 
 const PP = { q: '' };

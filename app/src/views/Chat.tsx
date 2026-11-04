@@ -45,6 +45,7 @@ import { AuthImage,
 import { ask, err, sheet, toast } from '../ui/overlay';
 import { Page } from '../ui/Page';
 import { Composer, SubHeader } from './Board';
+import { startDm } from '../lib/actions';
 import { openPerson } from './People';
 
 async function loadChats() {
@@ -220,11 +221,6 @@ function DmRow({ c: x }: { c: any }) {
 // ==================================================================
 // 대화 상대 고르기 (새 대화 · 초대)
 // ==================================================================
-export async function startDm(uid: number) {
-  const r = await post('chat.dm', { user_id: uid });
-  rememberConv(r.c, 'dm');
-  go('chat/' + r.c);
-}
 
 function openPicker(mode: 'new' | 'invite', info?: any) {
   sheet.show(mode === 'invite' ? '대화 상대 초대' : '새 대화', <Picker mode={mode} info={info} />);
