@@ -6,6 +6,7 @@
  */
 import { useSyncExternalStore } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LayoutAnimation } from 'react-native';
 import { router } from 'expo-router';
 import { api } from './api';
 import { DARK, LIGHT, Colors } from './theme';
@@ -110,7 +111,12 @@ export const setCloseOverlays = (f: () => void) => {
 };
 
 let nonce = 0;
+const groupOf = (sec: Sec) => (sec === 'ws' || sec === 'cm' ? sec : 'home');
 function showMain(m: MainRoute) {
+  // 홈 바 ↔ 떠 있는 알약 모양이 바뀔 때: 여백 · 모서리가 통통 튀며 바뀌도록 (웹의 .nav 전환)
+  if (groupOf(state.main.sec) !== groupOf(m.sec)) {
+    LayoutAnimation.configureNext({ duration: 480, update: { type: LayoutAnimation.Types.spring, springDamping: 0.72 } });
+  }
   if (router.canDismiss()) router.dismissAll();
   const same = state.main.sec === m.sec && state.main.tab === m.tab && state.main.id === m.id;
   // 같은 화면을 다시 누르면 새로 받기만 (id가 있으면 nonce로 다시 열기)

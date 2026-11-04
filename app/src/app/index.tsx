@@ -171,11 +171,6 @@ function BottomNav() {
   }
   const enter = entered === group;
   const sub = group !== 'home';
-  const morph = useAnim(sub ? 1 : 0);
-  useEffect(() => {
-    Animated.spring(morph, { toValue: sub ? 1 : 0, friction: 7, tension: 60, useNativeDriver: false }).start();
-  }, [sub]);
-  const m = (a: number, z: number) => morph.interpolate({ inputRange: [0, 1], outputRange: [a, z], extrapolate: 'clamp' });
   const dot = (key: string) => {
     if (group === 'home') return !!((key === 'ws' && (b.task || b.approval || b.notice)) || (key === 'cm' && b.channel) || (key === 'dm' && b.dm) || (key === 'all' && b.pending));
     if (group === 'ws') return !!((key === 'task' && b.task) || (key === 'doc' && b.approval) || (key === 'notice' && b.notice));
@@ -183,22 +178,14 @@ function BottomNav() {
     return false;
   };
   return (
-    <Animated.View
+    // 바 모양(여백 · 모서리)이 바뀌는 움직임은 store.ts 의 LayoutAnimation 이 맡음
+    <View
       style={[
         st.nav,
-        {
-          backgroundColor: c.surface,
-          shadowColor: '#000',
-          marginHorizontal: m(0, 12),
-          marginBottom: m(0, 12 + insets.bottom),
-          paddingTop: m(10, 8),
-          paddingBottom: m(10 + insets.bottom, 8),
-          paddingHorizontal: 8,
-          borderTopLeftRadius: m(28, 40),
-          borderTopRightRadius: m(28, 40),
-          borderBottomLeftRadius: m(0, 40),
-          borderBottomRightRadius: m(0, 40),
-        },
+        { backgroundColor: c.surface, shadowColor: '#000', paddingHorizontal: 8 },
+        sub
+          ? { marginHorizontal: 12, marginBottom: 12 + insets.bottom, paddingVertical: 8, borderRadius: 40 }
+          : { paddingTop: 10, paddingBottom: 10 + insets.bottom, borderTopLeftRadius: 28, borderTopRightRadius: 28 },
         sub
           ? { shadowOpacity: c.dark ? 0.55 : 0.16, shadowRadius: 16, shadowOffset: { width: 0, height: 12 }, elevation: 10 }
           : { shadowOpacity: c.dark ? 0.4 : 0.07, shadowRadius: 12, shadowOffset: { width: 0, height: -6 }, elevation: 12 },
@@ -221,7 +208,7 @@ function BottomNav() {
           />
         );
       })}
-    </Animated.View>
+    </View>
   );
 }
 

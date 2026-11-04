@@ -362,7 +362,7 @@ export function ProjectScreen({ id }: { id: number }) {
   }, [p && p.id, barW]);
 
   const head = (
-    <View style={[st.subH, { backgroundColor: c.surface, borderBottomColor: c.line, paddingTop: insets.top }]}>
+    <View style={[st.subH, { backgroundColor: c.surface, borderBottomColor: c.line, paddingTop: insets.top, minHeight: 56 + insets.top }]}>
       <IconBtn name="back" size={24} w={2} label="뒤로" onPress={() => back('ws/task')} />
       <View style={{ flex: 1, minWidth: 0 }}>
         <T style={{ fontSize: 16, fontWeight: '700' }} lines={1}>

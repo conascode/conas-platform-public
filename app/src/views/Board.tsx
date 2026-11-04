@@ -1,15 +1,15 @@
 /* 커뮤니티: 게시판 목록 · 글 보기(댓글) · 글쓰기 */
 import React, { useEffect, useRef, useState } from 'react';
-import { Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { abs, api, post } from '../lib/api';
+import { api, post } from '../lib/api';
 import { cacheEntries, cacheGet, useLoad, useUploads } from '../lib/hooks';
 import { L } from '../lib/loaders';
 import { router } from 'expo-router';
 import { back, getState, go, me, refresh, useColors, useStore } from '../lib/store';
 import { ago } from '../lib/util';
 import { Icon } from '../ui/Icon';
-import { Avatar, Btn, Card, Chips, Divided, Empty, ErrorView, Fab, Files, Grow, IconBtn, Input, LinkText, Loading, PageH, Press, Row, Sub, T, Tag, UpList } from '../ui/kit';
+import { AuthImage, Avatar, Btn, Card, Chips, Divided, Empty, ErrorView, Fab, Files, Grow, IconBtn, Input, LinkText, Loading, PageH, Press, Row, Sub, T, Tag, UpList } from '../ui/kit';
 import { ask, err, sheet, toast } from '../ui/overlay';
 import { Page, Skeleton } from '../ui/Page';
 
@@ -123,7 +123,7 @@ function PostRow({ p }: { p: any }) {
           {p.files && !p.thumb ? lk('clip', p.files) : null}
         </Row>
       </Grow>
-      {p.thumb ? <Image source={{ uri: abs(p.thumb) }} style={{ width: 64, height: 64, borderRadius: 10, backgroundColor: c.surface2 }} /> : null}
+      {p.thumb ? <AuthImage url={p.thumb} style={{ width: 64, height: 64, borderRadius: 10, backgroundColor: c.surface2 }} resizeMode="cover" /> : null}
     </Press>
   );
 }
@@ -135,7 +135,7 @@ export function SubHeader({ onBack, title, sub, right }: { onBack: () => any; ti
   const c = useColors();
   const insets = useSafeAreaInsets();
   return (
-    <View style={[st.subH, { backgroundColor: c.surface, borderBottomColor: c.line, paddingTop: insets.top }]}>
+    <View style={[st.subH, { backgroundColor: c.surface, borderBottomColor: c.line, paddingTop: insets.top, minHeight: 56 + insets.top }]}>
       <IconBtn name="back" size={24} w={2} label="뒤로" onPress={onBack} />
       <View style={{ flex: 1, minWidth: 0 }}>
         {typeof title === 'string' ? (

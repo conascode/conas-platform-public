@@ -5,6 +5,7 @@ import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Image,
+  ImageStyle,
   Linking,
   Modal,
   Platform,
@@ -22,14 +23,13 @@ import {
 } from 'react-native';
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import { abs } from '../lib/api';
+import { fetchAuthed, useAuthedUri } from '../lib/files';
 import { useColors } from '../lib/store';
 import { Colors, stTone, tone } from '../lib/theme';
 import { avatarColor, iso, pad, splitLinks, toDate } from '../lib/util';
 import { Icon } from './Icon';
-import { err } from './overlay';
+import { err, toast } from './overlay';
 
 type Kids = { children?: React.ReactNode };
 
@@ -407,7 +407,7 @@ export function Avatar({ m, size = 40, ring, noDot }: { m: any; size?: number; r
   return (
     <View style={[{ width: size, height: size, borderRadius: size / 2, backgroundColor: m.av ? c.surface2 : avatarColor(name), alignItems: 'center', justifyContent: 'center' }, ringStyle]}>
       {m.av ? (
-        <Image source={{ uri: abs(m.av) }} style={{ width: '100%', height: '100%', borderRadius: size / 2 }} />
+        <AuthImage url={m.av} style={{ width: '100%', height: '100%', borderRadius: size / 2 }} />
       ) : (
         <Text style={{ color: '#fff', fontWeight: '700', fontSize: Math.round(size * 0.38) }}>{[...name][0]}</Text>
       )}
@@ -766,16 +766,26 @@ export function DescBox({ text, style }: { text: string; style?: StyleProp<ViewS
 /** 파일을 받아서 휴대폰의 열기/공유 창으로 넘김 (로그인 쿠키가 함께 감) */
 export async function openFile(url: string, name?: string) {
   const safe = String(name || 'file').replace(/[\\/:*?"<>|\s]+/g, '_').slice(-80) || 'file';
-  const dir = FileSystem.cacheDirectory + 'dl-' + Date.now() + '/';
   try {
-    await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
-    const r = await FileSystem.downloadAsync(abs(url), dir + safe);
-    if (r.status !== 200) throw new Error('파일을 받지 못했어요. (' + r.status + ')');
-    if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(r.uri, { dialogTitle: name });
-    else await Linking.openURL(r.uri);
+    toast('파일을 받는 중이에요…');
+    // 로그인 쿠키를 붙여 받아서 저장한 뒤, 휴대폰의 열기/공유 창으로 넘김
+    const uri = await fetchAuthed(url, safe);
+    if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri, { dialogTitle: name });
+    else await Linking.openURL(uri);
   } catch (e: any) {
     err(e);
   }
+}
+
+/** 로그인해야 볼 수 있는 사진 (받는 동안은 회색 자리) */
+export function AuthImage({ url, style, resizeMode, spinner }: { url?: string | null; style?: StyleProp<ImageStyle>; resizeMode?: 'cover' | 'contain'; spinner?: boolean }) {
+  const c = useColors();
+  const uri = useAuthedUri(url);
+  if (!uri) {
+    const box = StyleSheet.flatten(style) as ViewStyle;
+    return <View style={[box, { backgroundColor: spinner ? 'transparent' : c.surface2, alignItems: 'center', justifyContent: 'center' }]}>{spinner ? <ActivityIndicator color="#fff" /> : null}</View>;
+  }
+  return <Image source={{ uri }} style={style} resizeMode={resizeMode} />;
 }
 
 export function ImageViewer({ file, onClose }: { file: any | null; onClose: () => void }) {
@@ -794,7 +804,7 @@ export function ImageViewer({ file, onClose }: { file: any | null; onClose: () =
           showsVerticalScrollIndicator={false}
         >
           <Pressable onPress={onClose} style={{ width: '100%', height: '100%', position: 'absolute' }} />
-          <Image source={{ uri: abs(file.view_url || file.url) }} style={{ width: '100%', height: '80%' }} resizeMode="contain" />
+          <AuthImage url={file.view_url || file.url} style={{ width: '100%', height: '80%' }} resizeMode="contain" spinner />
         </ScrollView>
         <View style={{ position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: insets.top + 8, paddingHorizontal: 8, paddingLeft: 16, paddingBottom: 8 }}>
           <Text style={{ flex: 1, color: 'rgba(255,255,255,0.85)', fontSize: 14, fontWeight: '600' }} numberOfLines={1}>
@@ -824,7 +834,7 @@ export function Files({ files, style }: { files?: any[]; style?: StyleProp<ViewS
       {files.map((f, i) =>
         f.is_image ? (
           <Press key={i} onPress={() => setView(f)} style={{ borderRadius: 12, overflow: 'hidden', backgroundColor: c.surface2 }} label={f.name}>
-            <Image source={{ uri: abs(f.view_url) }} style={{ width: '100%', height: 260 }} resizeMode="contain" />
+            <AuthImage url={f.view_url} style={{ width: '100%', height: 260 }} resizeMode="contain" />
           </Press>
         ) : (
           <FileRow key={i} f={f} />

@@ -1,8 +1,8 @@
 /* 채널 · DM 목록 / 대화 상대 고르기 / 대화방 (채널 · DM 공용) */
 import React, { useEffect, useRef, useState } from 'react';
-import { AppState, Image, KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
+import { AppState, KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { abs, api, legacy, post, upload } from '../lib/api';
+import { api, legacy, post, upload } from '../lib/api';
 import { cacheGet, cacheSet, useActive, useLoad } from '../lib/hooks';
 import { L, prefetchChat } from '../lib/loaders';
 import { back, getState, go, me, mem, refresh, rememberConv, setState, useColors, useStore } from '../lib/store';
@@ -10,7 +10,7 @@ import { ago, hm, iso, md, roleLabel, ROLE } from '../lib/util';
 import { Icon } from '../ui/Icon';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
-import {
+import { AuthImage,
   Avatar,
   Btn,
   Card,
@@ -657,7 +657,7 @@ export function ChatScreen({ id }: { id: number }) {
     const files = (m.files || []).map((f: any, k: number) =>
       f.is_image ? (
         <Press key={k} onPress={() => setView(f)} style={{ borderRadius: 14, overflow: 'hidden', backgroundColor: c.surface2 }} label={f.name}>
-          <Image source={{ uri: abs(f.view_url) }} style={{ width: 220, height: 220 }} resizeMode="cover" />
+          <AuthImage url={f.view_url} style={{ width: 220, height: 220 }} resizeMode="cover" />
         </Press>
       ) : (
         <View key={k} style={{ maxWidth: 240 }}>
