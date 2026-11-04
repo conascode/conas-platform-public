@@ -1,12 +1,13 @@
 /* 워크스페이스 > 근태: 월간 달력 · 주간 목록 */
 import React, { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
-import { api } from '../lib/api';
-import { go, me, useColors, useStore } from '../lib/store';
+import { cacheGet, cacheSet, prefetch, useLoad } from '../lib/hooks';
+import { L } from '../lib/loaders';
+import { go, me, useColors } from '../lib/store';
 import { dotColor } from '../lib/theme';
 import { addDays, DOW, iso, md, monthKey, today } from '../lib/util';
-import { Btn, Card, CardH, Divided, ErrorView, IconBtn, Loading, PageH, Press, Seg, St, Stat, Stats, Sub, T } from '../ui/kit';
-import { Page } from '../ui/Page';
+import { Btn, Card, CardH, Divided, ErrorView, IconBtn, PageH, Press, Seg, St, Stat, Stats, Sub, T } from '../ui/kit';
+import { Page, Skeleton } from '../ui/Page';
 
 const ST_LABEL: Record<string, string> = { ok: '정상', late: '지각', leave: '연차', half: '반차', no: '결근' };
 const AT = { view: 'month', off: 0, sel: null as string | null };
@@ -18,55 +19,67 @@ function diffH(a: string, b: string) {
   return `${Math.floor(t / 60)}시간 ${t % 60}분`;
 }
 
+/** 월간이면 그 달 1일, 주간이면 그 주 월요일 */
+function range(view: string, off: number) {
+  const td = today();
+  const base = new Date(td.getFullYear(), td.getMonth() + (view === 'month' ? off : 0), 1);
+  const mon = addDays(td, -((td.getDay() + 6) % 7) + (view === 'week' ? off : 0) * 7);
+  const weekDays = [...Array(5)].map((_, i) => addDays(mon, i));
+  // 이번 달(위쪽 숫자용) + 보여줄 달
+  const months = [monthKey(td), ...(view === 'month' ? [monthKey(base)] : weekDays.map(monthKey))].filter((k, i, a) => a.indexOf(k) === i);
+  const end = addDays(mon, 4);
+  const title = view === 'month' ? `${base.getFullYear()}년 ${base.getMonth() + 1}월` : `${mon.getMonth() + 1}.${mon.getDate()} – ${end.getMonth() + 1}.${end.getDate()}`;
+  return { base, mon, weekDays, months, title };
+}
+
+/** 달마다 따로 기억해 둔 근태 기록을 모아서 (하나라도 없으면 null) */
+const fromCache = (months: string[]) => (months.every((m) => cacheGet(L.att(m)[0])) ? Object.fromEntries(months.map((m) => [m, cacheGet(L.att(m)[0])])) : null);
+
 export function AttView() {
   const c = useColors();
-  const rk = useStore((s) => s.refreshKey);
   const [view, setView] = useState(AT.view);
   const [off, setOff] = useState(AT.off);
   const [sel, setSel] = useState<string | null>(AT.sel);
-  const [cache, setCache] = useState<Record<string, any>>({});
-  const [error, setError] = useState('');
-  const [retry, setRetry] = useState(0);
   useEffect(() => {
     AT.view = view;
     AT.off = off;
     AT.sel = sel;
   }, [view, off, sel]);
-  // 화면에 들어올 때마다 새로 받음
-  useEffect(() => setCache({}), [rk]);
+
+  const req = range(view, off);
+  const q = useLoad('attv:' + req.months.join(','), async () => {
+    const rows = await Promise.all(
+      req.months.map(async (m) => {
+        const [k, load] = L.att(m);
+        const d = await load();
+        cacheSet(k, d);
+        return [m, d] as const;
+      })
+    );
+    return Object.fromEntries(rows);
+  });
+
+  // 지금 고른 달의 기록이 아직 없으면, 받을 때까지 마지막으로 보던 달을 흐리게 보여줌
+  const have = q.data && req.months.every((m) => (q.data as any)[m]) ? (q.data as any) : fromCache(req.months);
+  const [last, setLast] = useState<{ view: string; off: number; data: any } | null>(null);
+  const same = (a: any, b: any) => Object.keys(a).length === Object.keys(b).length && Object.keys(a).every((k) => a[k] === b[k]);
+  if (have && (!last || last.view !== view || last.off !== off || !same(last.data, have))) setLast({ view, off, data: have });
+  const shown = have ? { view, off, data: have } : last;
+  const stale = !have && !!shown;
+
+  // 옆 달도 미리 받아둠
+  useEffect(() => {
+    if (!have || view !== 'month') return;
+    [-1, 1].forEach((n) => range('month', off + n).months.forEach((m) => prefetch(...L.att(m))));
+  }, [!!have, view, off]);
 
   const td = today();
-  const base = new Date(td.getFullYear(), td.getMonth() + (view === 'month' ? off : 0), 1);
-  const mon = addDays(td, -((td.getDay() + 6) % 7) + (view === 'week' ? off : 0) * 7);
-  const weekDays = [...Array(5)].map((_, i) => addDays(mon, i));
-  const need = [monthKey(td), ...(view === 'month' ? [monthKey(base)] : weekDays.map(monthKey))].filter((k, i, a) => a.indexOf(k) === i);
-  const missing = need.filter((k) => !cache[k]);
-  useEffect(() => {
-    if (!missing.length) return;
-    let ok = true;
-    Promise.all(missing.map((k) => api('att', { month: k }).then((d) => [k, d] as const)))
-      .then((rows) => {
-        if (!ok) return;
-        setCache((x) => ({ ...x, ...Object.fromEntries(rows) }));
-        setError('');
-      })
-      .catch((e) => ok && setError(e.message));
-    return () => {
-      ok = false;
-    };
-  }, [missing.join(','), retry]);
-
-  if (missing.length) {
-    return <Page>{error ? <ErrorView message={error} onRetry={() => {
-          setError('');
-          setRetry(retry + 1);
-        }} /> : <Loading />}</Page>;
-  }
-  const cur = cache[monthKey(td)];
-  let body: React.ReactNode;
-  let title: string;
-  if (view === 'month') {
-    const data = cache[monthKey(base)];
+  const cur = shown ? shown.data[monthKey(td)] : null;
+  let body: React.ReactNode = null;
+  if (!shown) body = q.error ? <ErrorView message={q.error} onRetry={q.reload} /> : <Skeleton cards={1} style={{ marginTop: 4 }} />;
+  else if (shown.view === 'month') {
+    const { base } = range('month', shown.off);
+    const data = shown.data[monthKey(base)];
     const y = base.getFullYear();
     const m = base.getMonth();
     const dim = new Date(y, m + 1, 0).getDate();
@@ -94,13 +107,6 @@ export function AttView() {
     const rec = data.days[s];
     body = (
       <>
-        <View style={{ flexDirection: 'row' }}>
-          {DOW.map((d) => (
-            <Text key={d} style={{ width: `${100 / 7}%`, textAlign: 'center', fontSize: 12, color: c.sub, paddingTop: 4, paddingBottom: 8, fontWeight: '600' }}>
-              {d}
-            </Text>
-          ))}
-        </View>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>{cells}</View>
         <View style={{ flexDirection: 'row', gap: 12, marginTop: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
           {[
@@ -132,12 +138,12 @@ export function AttView() {
         </View>
       </>
     );
-    title = `${y}년 ${m + 1}월`;
   } else {
+    const { weekDays } = range('week', shown.off);
     body = (
       <Divided>
         {weekDays.map((d) => {
-          const rec = cache[monthKey(d)].days[iso(d)];
+          const rec = shown.data[monthKey(d)].days[iso(d)];
           let time: React.ReactNode;
           if (rec && rec.in)
             time = (
@@ -163,24 +169,23 @@ export function AttView() {
         })}
       </Divided>
     );
-    const end = addDays(mon, 4);
-    title = `${mon.getMonth() + 1}.${mon.getDate()} – ${end.getMonth() + 1}.${end.getDate()}`;
   }
 
   return (
-    <Page>
-      <PageH title="근태" sub={`${me().team || '소속 없음'} · ${cur.work_start} – ${cur.work_end} 근무`} />
+    <Page q={{ ...q, data: true, error: '', stale: false }}>
+      <PageH title="근태" sub={`${me().team || '소속 없음'} · ${cur ? `${cur.work_start} – ${cur.work_end} 근무` : '근무 시간'}`} />
       <Stats>
-        <Stat label="이번 달 근무" value={cur.work_days} unit="일" />
-        <Stat label="지각" value={cur.late} unit="회" color={cur.late ? c.warn : undefined} />
-        <Stat label="남은 연차" value={cur.leave_left === null ? '-' : cur.leave_left} unit={cur.leave_left === null ? '' : '일'} color={c.leave} />
+        <Stat label="이번 달 근무" value={cur ? cur.work_days : '-'} unit={cur ? '일' : ''} />
+        <Stat label="지각" value={cur ? cur.late : '-'} unit={cur ? '회' : ''} color={cur && cur.late ? c.warn : undefined} />
+        <Stat label="남은 연차" value={!cur || cur.leave_left === null ? '-' : cur.leave_left} unit={!cur || cur.leave_left === null ? '' : '일'} color={c.leave} />
       </Stats>
       <Card>
+        {/* 이전 · 다음 · 월간/주간은 누르는 즉시 바뀌고, 아래 내용만 새로 받음 */}
         <CardH
           title={
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
               <IconBtn name="chevL" size={20} label="이전" onPress={() => setOff(off - 1)} />
-              <T style={{ fontSize: 16, fontWeight: '700', minWidth: 96, textAlign: 'center' }}>{title}</T>
+              <T style={{ fontSize: 16, fontWeight: '700', minWidth: 96, textAlign: 'center' }}>{req.title}</T>
               <IconBtn name="chevR" size={20} label="다음" onPress={() => setOff(off + 1)} />
             </View>
           }
@@ -198,9 +203,18 @@ export function AttView() {
             />
           }
         />
-        {body}
+        {view === 'month' ? (
+          <View style={{ flexDirection: 'row' }}>
+            {DOW.map((d) => (
+              <Text key={d} style={{ width: `${100 / 7}%`, textAlign: 'center', fontSize: 12, color: c.sub, paddingTop: 4, paddingBottom: 8, fontWeight: '600' }}>
+                {d}
+              </Text>
+            ))}
+          </View>
+        ) : null}
+        <View style={stale || (shown && shown.view !== view) ? { opacity: 0.5 } : null}>{body}</View>
       </Card>
-      {cur.leave_total === null ? <Sub style={{ marginHorizontal: 4, marginBottom: 12 }}>연차 일수는 대표가 임직원 화면에서 정해요.</Sub> : null}
+      {cur && cur.leave_total === null ? <Sub style={{ marginHorizontal: 4, marginBottom: 12 }}>연차 일수는 대표가 임직원 화면에서 정해요.</Sub> : null}
       <Btn kind="ghost" icon="file" title="근태 사유서 · 연차 신청하기" onPress={() => go('ws/doc')} />
     </Page>
   );

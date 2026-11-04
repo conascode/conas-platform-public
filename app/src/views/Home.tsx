@@ -2,8 +2,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
-import { api, post } from '../lib/api';
+import { post } from '../lib/api';
 import { useLoad } from '../lib/hooks';
+import { L } from '../lib/loaders';
 import { go, me, refresh, setBadges, useColors, useStore } from '../lib/store';
 import { dotColor } from '../lib/theme';
 import { addDays, ago, DOW, iso, md, toDate, today } from '../lib/util';
@@ -17,11 +18,12 @@ let selDay: number | null = null;
 export function HomeView() {
   const c = useColors();
   const pending = useStore((s) => s.badges.pending || 0);
-  const q = useLoad(async () => {
-    const d = await api('home');
+  const [key, load] = L.home();
+  const q = useLoad(key, async () => {
+    const d = await load();
     setBadges(d.badges);
     return d;
-  }, []);
+  });
   const [day, setDay] = useState<number>(selDay ?? new Date().getDay());
   useEffect(() => {
     selDay = day;
@@ -191,11 +193,18 @@ function Gradient({ from, to }: { from: string; to: string }) {
   );
 }
 
-function FakeQr({ seed }: { seed: number }) {
-  const N = 25;
-  const cells: React.ReactNode[] = [];
-  const inF = (x: number, y: number) => (x < 8 && y < 8) || (x >= N - 8 && y < 8) || (x < 8 && y >= N - 8);
-  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) if (!inF(x, y) && Math.random() < 0.47) cells.push(<Rect key={`${seed}-${x}-${y}`} x={x} y={y} width={1.02} height={1.02} />);
+const QN = 25;
+/** 데모 QR 점 무늬 (모서리 세 곳의 네모 자리는 비움) */
+function randomDots(): [number, number][] {
+  const inF = (x: number, y: number) => (x < 8 && y < 8) || (x >= QN - 8 && y < 8) || (x < 8 && y >= QN - 8);
+  const out: [number, number][] = [];
+  for (let y = 0; y < QN; y++) for (let x = 0; x < QN; x++) if (!inF(x, y) && Math.random() < 0.47) out.push([x, y]);
+  return out;
+}
+
+function FakeQr({ dots }: { dots: [number, number][] }) {
+  const N = QN;
+  const cells = dots.map(([x, y]) => <Rect key={`${x}-${y}`} x={x} y={y} width={1.02} height={1.02} />);
   const fin = (x: number, y: number) => [
     <Rect key={`a${x}${y}`} x={x} y={y} width={7} height={7} />,
     <Rect key={`b${x}${y}`} x={x + 1} y={y + 1} width={5} height={5} fill="#fff" />,
@@ -214,13 +223,13 @@ function FakeQr({ seed }: { seed: number }) {
 function QrSheet({ out }: { out: boolean }) {
   const c = useColors();
   const [sec, setSec] = useState(30);
-  const [seed, setSeed] = useState(0);
+  const [dots, setDots] = useState(randomDots);
   const t = useRef<any>(null);
   useEffect(() => {
     t.current = setInterval(() => {
       setSec((s) => {
         if (s <= 1) {
-          setSeed((x) => x + 1);
+          setDots(randomDots());
           return 30;
         }
         return s - 1;
@@ -242,7 +251,7 @@ function QrSheet({ out }: { out: boolean }) {
           데모 화면이에요 · 실제 QR 인식은 아직 없어요
         </Text>
         <View style={{ padding: 14, borderRadius: 20, borderWidth: 1, borderColor: c.line, backgroundColor: '#fff' }}>
-          <FakeQr seed={seed} />
+          <FakeQr dots={dots} />
         </View>
         <Text style={{ fontSize: 13, color: c.sub }}>
           <Text style={{ color: c.primary, fontWeight: '700' }}>{sec}</Text>초 후 새 QR로 바뀌어요

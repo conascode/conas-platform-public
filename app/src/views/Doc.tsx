@@ -3,36 +3,11 @@ import React, { useState } from 'react';
 import { Text, View } from 'react-native';
 import { api, post } from '../lib/api';
 import { useLoad, useUploads } from '../lib/hooks';
+import { L } from '../lib/loaders';
 import { me, mem, refresh, useColors } from '../lib/store';
 import { ago, iso, md, roleLabel, today, won } from '../lib/util';
 import { Icon } from '../ui/Icon';
-import {
-  Avatar,
-  Btn,
-  Card,
-  CardH,
-  Chips,
-  DateInput,
-  Divided,
-  DocIc,
-  Empty,
-  Field,
-  Files,
-  Grow,
-  Input,
-  KV,
-  LinkText,
-  ListItem,
-  Loading,
-  PageH,
-  Press,
-  Select,
-  St,
-  Sub,
-  T,
-  Timeline,
-  UpList,
-} from '../ui/kit';
+import { Avatar, Btn, Card, CardH, Chips, DateInput, Divided, DocIc, Empty, Field, Files, Grow, Input, KV, LinkText, ListItem, Loading, PageH, Press, Select, St, Sub, T, Timeline, UpList } from '../ui/kit';
 import { ask, sheet, toast } from '../ui/overlay';
 import { Page } from '../ui/Page';
 
@@ -44,18 +19,145 @@ const done = (msg?: string) => {
 
 type DocType = { id: string; name: string; desc: string; ic: string; c: string; fields: [string, string, string][]; files?: boolean | string; pick?: boolean };
 const DOC_TYPES: DocType[] = [
-  { id: 'reason', name: '근태 사유서', desc: '지각·조퇴·결근', ic: 'clock', c: 'c-warn', fields: [['date', '날짜', 'date'], ['kind', '유형', 'select:지각,조퇴,결근,외출'], ['reason', '사유', 'textarea']] },
-  { id: 'leave', name: '연차·반차 신청', desc: '휴가 신청', ic: 'calendar', c: 'c-leave', fields: [['kind', '종류', 'select:연차,오전 반차,오후 반차,경조 휴가'], ['date', '시작일', 'date'], ['to', '종료일 (연차만)', 'date?'], ['reason', '사유 (선택)', 'textarea?']] },
-  { id: 'ot', name: '연장근무 신청', desc: '야근·휴일근무', ic: 'moon', c: 'c-primary', fields: [['date', '날짜', 'date'], ['from', '시작 시간', 'time:18:00'], ['until', '종료 시간', 'time:21:00'], ['reason', '업무 내용', 'textarea']] },
-  { id: 'exp', name: '지출결의서', desc: '경비·법인카드 정산', ic: 'card', c: 'c-ok', fields: [['date', '사용일', 'date'], ['item', '항목', 'select:식대,교통비,도서구입,장비구입,기타'], ['amount', '금액 (원)', 'number'], ['reason', '내용', 'textarea']], files: true },
-  { id: 'cert', name: '증명서 발급', desc: '재직·경력증명서', ic: 'award', c: 'c-cyan', fields: [['kind', '종류', 'select:재직증명서,경력증명서,원천징수영수증'], ['purpose', '용도', 'text'], ['count', '매수', 'number:1']] },
-  { id: 'supply', name: '비품 신청', desc: '사무용품·장비', ic: 'box', c: 'c-pink', fields: [['item', '품목', 'text'], ['count', '수량', 'number:1'], ['reason', '사유', 'textarea']] },
+  {
+    id: 'reason',
+    name: '근태 사유서',
+    desc: '지각·조퇴·결근',
+    ic: 'clock',
+    c: 'c-warn',
+    fields: [
+      ['date', '날짜', 'date'],
+      ['kind', '유형', 'select:지각,조퇴,결근,외출'],
+      ['reason', '사유', 'textarea'],
+    ],
+  },
+  {
+    id: 'leave',
+    name: '연차·반차 신청',
+    desc: '휴가 신청',
+    ic: 'calendar',
+    c: 'c-leave',
+    fields: [
+      ['kind', '종류', 'select:연차,오전 반차,오후 반차,경조 휴가'],
+      ['date', '시작일', 'date'],
+      ['to', '종료일 (연차만)', 'date?'],
+      ['reason', '사유 (선택)', 'textarea?'],
+    ],
+  },
+  {
+    id: 'ot',
+    name: '연장근무 신청',
+    desc: '야근·휴일근무',
+    ic: 'moon',
+    c: 'c-primary',
+    fields: [
+      ['date', '날짜', 'date'],
+      ['from', '시작 시간', 'time:18:00'],
+      ['until', '종료 시간', 'time:21:00'],
+      ['reason', '업무 내용', 'textarea'],
+    ],
+  },
+  {
+    id: 'exp',
+    name: '지출결의서',
+    desc: '경비·법인카드 정산',
+    ic: 'card',
+    c: 'c-ok',
+    fields: [
+      ['date', '사용일', 'date'],
+      ['item', '항목', 'select:식대,교통비,도서구입,장비구입,기타'],
+      ['amount', '금액 (원)', 'number'],
+      ['reason', '내용', 'textarea'],
+    ],
+    files: true,
+  },
+  {
+    id: 'cert',
+    name: '증명서 발급',
+    desc: '재직·경력증명서',
+    ic: 'award',
+    c: 'c-cyan',
+    fields: [
+      ['kind', '종류', 'select:재직증명서,경력증명서,원천징수영수증'],
+      ['purpose', '용도', 'text'],
+      ['count', '매수', 'number:1'],
+    ],
+  },
+  {
+    id: 'supply',
+    name: '비품 신청',
+    desc: '사무용품·장비',
+    ic: 'box',
+    c: 'c-pink',
+    fields: [
+      ['item', '품목', 'text'],
+      ['count', '수량', 'number:1'],
+      ['reason', '사유', 'textarea'],
+    ],
+  },
   // 업무 문서: 받을 사람(대표·팀장·관리자)을 한 명 골라 제출 → 승인 · 반려
-  { id: 'propose', pick: true, name: '제안서', desc: '새 아이디어·개선 제안', ic: 'flag', c: 'c-primary', fields: [['subject', '제목', 'text'], ['background', '제안 배경', 'textarea'], ['content', '제안 내용', 'textarea'], ['effect', '기대 효과 (선택)', 'textarea?']], files: '참고 자료' },
-  { id: 'suggest', pick: true, name: '건의서', desc: '불편한 점·바라는 점', ic: 'megaphone', c: 'c-warn', fields: [['subject', '제목', 'text'], ['content', '건의 내용', 'textarea'], ['solution', '개선 방안 (선택)', 'textarea?']], files: '참고 자료' },
-  { id: 'request', pick: true, name: '품의서', desc: '구매·계약 등 사전 승인', ic: 'checkSq', c: 'c-ok', fields: [['subject', '제목', 'text'], ['content', '품의 내용', 'textarea'], ['amount', '금액 (원, 선택)', 'number?'], ['reason', '필요한 이유', 'textarea']], files: '견적서 · 참고 자료' },
+  {
+    id: 'propose',
+    pick: true,
+    name: '제안서',
+    desc: '새 아이디어·개선 제안',
+    ic: 'flag',
+    c: 'c-primary',
+    fields: [
+      ['subject', '제목', 'text'],
+      ['background', '제안 배경', 'textarea'],
+      ['content', '제안 내용', 'textarea'],
+      ['effect', '기대 효과 (선택)', 'textarea?'],
+    ],
+    files: '참고 자료',
+  },
+  {
+    id: 'suggest',
+    pick: true,
+    name: '건의서',
+    desc: '불편한 점·바라는 점',
+    ic: 'megaphone',
+    c: 'c-warn',
+    fields: [
+      ['subject', '제목', 'text'],
+      ['content', '건의 내용', 'textarea'],
+      ['solution', '개선 방안 (선택)', 'textarea?'],
+    ],
+    files: '참고 자료',
+  },
+  {
+    id: 'request',
+    pick: true,
+    name: '품의서',
+    desc: '구매·계약 등 사전 승인',
+    ic: 'checkSq',
+    c: 'c-ok',
+    fields: [
+      ['subject', '제목', 'text'],
+      ['content', '품의 내용', 'textarea'],
+      ['amount', '금액 (원, 선택)', 'number?'],
+      ['reason', '필요한 이유', 'textarea'],
+    ],
+    files: '견적서 · 참고 자료',
+  },
 ];
-const FIELD_LABEL: Record<string, string> = { date: '날짜', kind: '종류', reason: '사유', to: '종료일', from: '시작', until: '종료', item: '항목', amount: '금액', purpose: '용도', count: '수량', subject: '제목', background: '제안 배경', content: '내용', effect: '기대 효과', solution: '개선 방안' };
+const FIELD_LABEL: Record<string, string> = {
+  date: '날짜',
+  kind: '종류',
+  reason: '사유',
+  to: '종료일',
+  from: '시작',
+  until: '종료',
+  item: '항목',
+  amount: '금액',
+  purpose: '용도',
+  count: '수량',
+  subject: '제목',
+  background: '제안 배경',
+  content: '내용',
+  effect: '기대 효과',
+  solution: '개선 방안',
+};
 const LONG_FIELDS = ['background', 'content', 'effect', 'solution'];
 const AP_ST: Record<string, [string, string]> = { pending: ['wait', '대기'], approved: ['ok', '승인'], rejected: ['no', '반려'], canceled: ['off', '취소'] };
 const docType = (id: string) => DOC_TYPES.find((t) => t.id === id) || DOC_TYPES[0];
@@ -65,44 +167,47 @@ const D = { filter: '전체', data: null as any };
 export function DocView() {
   const c = useColors();
   const [filter, setFilter] = useState(D.filter);
-  const q = useLoad(async () => {
-    const d = await api('approvals');
-    D.data = d;
-    return d;
-  }, []);
+  const q = useLoad(...L.approvals());
+  if (q.data) D.data = q.data;
   const changeFilter = (f: string) => {
     D.filter = f;
     setFilter(f);
   };
+  // 제목 · 서류 고르는 칸은 데이터를 다시 받아도 그대로
+  const d0: any = q.data;
+  const tile = (t: DocType) => (
+    <View key={t.id} style={{ width: '50%', padding: 4 }}>
+      <Press onPress={() => openDocNew(t.id)} style={{ backgroundColor: c.surface, borderRadius: 16, padding: 16, gap: 10, minHeight: 112 }} pressedStyle={{ transform: [{ scale: 0.98 }] }}>
+        <DocIc icon={t.ic} t={t.c} iconSize={20} />
+        <View>
+          <T style={{ fontWeight: '700' }}>{t.name}</T>
+          <Sub style={{ fontSize: 12, marginTop: 4 }}>{t.id === 'leave' && d0 && d0.leave_left !== null ? '남은 연차 ' + d0.leave_left + '일' : t.desc}</Sub>
+        </View>
+      </Press>
+    </View>
+  );
+  const groupH = (title: string, sub: string) => (
+    <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8, marginTop: 4, marginHorizontal: 4, marginBottom: 4 }}>
+      <T style={{ fontSize: 14, fontWeight: '800' }}>{title}</T>
+      <Sub style={{ fontSize: 12 }}>{sub}</Sub>
+    </View>
+  );
+  const header = (
+    <>
+      <PageH title="서류" sub="작성할 서류를 고르세요" />
+      {groupH('업무 문서', '받을 사람을 골라 제출해요')}
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -4, marginBottom: 18 }}>{DOC_TYPES.filter((t) => t.pick).map(tile)}</View>
+      {groupH('신청 서류', '결재선을 따라 올라가요')}
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -4, marginBottom: 12 }}>{DOC_TYPES.filter((t) => !t.pick).map(tile)}</View>
+    </>
+  );
   return (
-    <Page q={q}>
+    <Page q={q} header={header}>
       {(d: any) => {
         const map: Record<string, string> = { 대기: 'pending', 승인: 'approved', 반려: 'rejected' };
         const list = d.mine.filter((a: any) => filter === '전체' || a.status === map[filter]);
-        const tile = (t: DocType) => (
-          <View key={t.id} style={{ width: '50%', padding: 4 }}>
-            <Press onPress={() => openDocNew(t.id)} style={{ backgroundColor: c.surface, borderRadius: 16, padding: 16, gap: 10, minHeight: 112 }} pressedStyle={{ transform: [{ scale: 0.98 }] }}>
-              <DocIc icon={t.ic} t={t.c} iconSize={20} />
-              <View>
-                <T style={{ fontWeight: '700' }}>{t.name}</T>
-                <Sub style={{ fontSize: 12, marginTop: 4 }}>{t.id === 'leave' && d.leave_left !== null ? '남은 연차 ' + d.leave_left + '일' : t.desc}</Sub>
-              </View>
-            </Press>
-          </View>
-        );
-        const groupH = (title: string, sub: string) => (
-          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8, marginTop: 4, marginHorizontal: 4, marginBottom: 4 }}>
-            <T style={{ fontSize: 14, fontWeight: '800' }}>{title}</T>
-            <Sub style={{ fontSize: 12 }}>{sub}</Sub>
-          </View>
-        );
         return (
           <>
-            <PageH title="서류" sub="작성할 서류를 고르세요" />
-            {groupH('업무 문서', '받을 사람을 골라 제출해요')}
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -4, marginBottom: 18 }}>{DOC_TYPES.filter((t) => t.pick).map(tile)}</View>
-            {groupH('신청 서류', '결재선을 따라 올라가요')}
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -4, marginBottom: 12 }}>{DOC_TYPES.filter((t) => !t.pick).map(tile)}</View>
             {d.inbox.length ? (
               <Card review>
                 <CardH
@@ -259,7 +364,21 @@ function DocNew({ t }: { t: DocType }) {
               picks.map((m: any) => {
                 const on = to === m.id;
                 return (
-                  <Press key={m.id} onPress={() => setTo(m.id)} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 14, borderWidth: 1.5, borderColor: on ? c.primary : c.line, backgroundColor: on ? c.primarySoft : 'transparent' }}>
+                  <Press
+                    key={m.id}
+                    onPress={() => setTo(m.id)}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 10,
+                      paddingVertical: 10,
+                      paddingHorizontal: 12,
+                      borderRadius: 14,
+                      borderWidth: 1.5,
+                      borderColor: on ? c.primary : c.line,
+                      backgroundColor: on ? c.primarySoft : 'transparent',
+                    }}
+                  >
                     <Avatar m={m} size={36} noDot />
                     <View>
                       <T style={{ fontWeight: '700' }}>{m.name}</T>

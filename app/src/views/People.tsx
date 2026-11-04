@@ -47,7 +47,7 @@ export function PeopleView() {
   const c = useColors();
   const [qs, setQs] = useState(PP.q);
   // 들어올 때마다 최신 인사 정보로
-  const q = useLoad(() => loadData(), []);
+  const q = useLoad('people', () => loadData());
   const data = useStore((s) => s.data);
   const all: any[] = data.members;
   const s = qs.trim().toLowerCase();
@@ -126,7 +126,7 @@ export function PeopleView() {
     );
   }
   return (
-    <Page q={{ ...q, data: q.data || (q.error ? null : data) }}>
+    <Page q={{ ...q, data: data, error: '' }}>
       <PageH
         title="임직원"
         sub={`CONAS · ${all.length}명${isCeo() ? ' · 직원을 누르면 직책을 바꿀 수 있어요' : ''}`}

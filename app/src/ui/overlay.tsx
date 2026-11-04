@@ -7,6 +7,7 @@
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Dimensions, KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useAnim } from './anim';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { setCloseOverlays, useColors } from '../lib/store';
 import { Icon } from './Icon';
@@ -35,7 +36,7 @@ export function ToastHost({ inSheet }: { inSheet?: boolean }) {
   const insets = useSafeAreaInsets();
   const [t, setT] = useState<ToastState>(toastState);
   const [sheetOpen, setSheetOpen] = useState(!!sheetState);
-  const anim = useRef(new Animated.Value(0)).current;
+  const anim = useAnim(0);
   useEffect(() => {
     const f = (x: ToastState) => setT(x);
     const g = (s: SheetState) => setSheetOpen(!!s);
@@ -100,8 +101,7 @@ export function SheetHost() {
   const insets = useSafeAreaInsets();
   const [s, setS] = useState<SheetState>(sheetState);
   const [visible, setVisible] = useState(!!sheetState);
-  const shown = useRef<SheetState>(null);
-  const y = useRef(new Animated.Value(0)).current;
+  const y = useAnim(0);
   const isVisible = useRef(false);
   // 열 때마다 늘어남 → 올라오는 움직임을 (다시) 시작
   const [seq, setSeq] = useState(0);
@@ -111,7 +111,6 @@ export function SheetHost() {
         // 완전히 닫혀 있던 경우에만 아래에서부터. 열린 채 내용만 바뀌면 그대로 둠
         if (!isVisible.current) y.setValue(0);
         isVisible.current = true;
-        shown.current = x;
         setS(x);
         setVisible(true);
         setSeq((n) => n + 1);
@@ -134,7 +133,7 @@ export function SheetHost() {
     if (isVisible.current) Animated.spring(y, { toValue: 1, useNativeDriver: true, friction: 9, tension: 70 }).start();
   }, [seq]);
   const h = Dimensions.get('window').height;
-  const cur = s || shown.current;
+  const cur = s;
   return (
     <Modal visible={visible} transparent animationType="none" statusBarTranslucent navigationBarTranslucent onRequestClose={() => sheet.close()}>
       <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>

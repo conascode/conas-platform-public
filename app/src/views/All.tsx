@@ -11,7 +11,7 @@ import { ago, roleLabel } from '../lib/util';
 import { Icon } from '../ui/Icon';
 import { Avatar, Btn, Card, CardH, Count, Divided, DocIc, Empty, ErrorView, Field, Grow, Input, ListItem, Loading, More, PageH, Press, Row, Seg, Select, St, Sub, SwitchRow, T, Tag } from '../ui/kit';
 import { ask, sheet, toast } from '../ui/overlay';
-import { Page } from '../ui/Page';
+import { Page, Skeleton } from '../ui/Page';
 import { SubHeader } from './Board';
 import { confirmLogout } from './Me';
 
@@ -91,7 +91,7 @@ export function AdminScreen({ sub: sub0 }: { sub: string }) {
   const insets = useSafeAreaInsets();
   const m = me();
   const [sub, setSub] = useState(sub0 === 'boards' ? 'boards' : 'members');
-  const q = useLoad(() => (m.is_admin ? api(sub === 'boards' ? 'admin.boards' : 'admin.members') : Promise.resolve(null)), [sub]);
+  const q = useLoad(m.is_admin ? `admin:${sub}` : null, () => api(sub === 'boards' ? 'admin.boards' : 'admin.members'));
   return (
     <View style={{ flex: 1, backgroundColor: c.surface2 }}>
       <SubHeader onBack={() => back('all')} title="관리자" />
@@ -116,7 +116,18 @@ export function AdminScreen({ sub: sub0 }: { sub: string }) {
               />
             }
           />
-          {!q.data ? q.error ? <ErrorView message={q.error} onRetry={q.reload} /> : <Loading /> : sub === 'members' ? <Members list={q.data.members} /> : <Boards boards={q.data.boards} />}
+          {!q.data ? (
+            q.error ? (
+              <ErrorView message={q.error} onRetry={q.reload} />
+            ) : (
+              <Skeleton />
+            )
+          ) : (
+            // 회원 ↔ 게시판을 바꾸는 동안은 이전 내용을 흐리게
+            <View style={q.stale ? { opacity: 0.5 } : null}>
+              {q.data.members && sub === 'members' ? <Members list={q.data.members} /> : q.data.boards && sub === 'boards' ? <Boards boards={q.data.boards} /> : <Skeleton />}
+            </View>
+          )}
         </ScrollView>
       )}
     </View>
@@ -169,7 +180,8 @@ const ADMIN_MSG: Record<string, string> = { approve: '승인했어요', enable: 
 function MemberAct({ m }: { m: any }) {
   const self = m.id === me().id;
   const run = async (a: string) => {
-    if (['disable', 'revoke_admin'].includes(a) && !(await ask({ title: '확인', body: a === 'disable' ? '이 회원이 더 이상 로그인할 수 없게 돼요. 계속할까요?' : '관리자 권한을 해제할까요?', ok: '계속', danger: true }))) return;
+    if (['disable', 'revoke_admin'].includes(a) && !(await ask({ title: '확인', body: a === 'disable' ? '이 회원이 더 이상 로그인할 수 없게 돼요. 계속할까요?' : '관리자 권한을 해제할까요?', ok: '계속', danger: true })))
+      return;
     await post('admin.member', { user_id: m.id, action: a });
     sheet.close();
     toast(ADMIN_MSG[a]);

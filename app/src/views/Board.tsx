@@ -1,75 +1,98 @@
 /* 커뮤니티: 게시판 목록 · 글 보기(댓글) · 글쓰기 */
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { abs, api, post } from '../lib/api';
-import { useLoad, useUploads } from '../lib/hooks';
+import { cacheEntries, cacheGet, useLoad, useUploads } from '../lib/hooks';
+import { L } from '../lib/loaders';
 import { router } from 'expo-router';
 import { back, getState, go, me, refresh, useColors, useStore } from '../lib/store';
 import { ago } from '../lib/util';
 import { Icon } from '../ui/Icon';
 import { Avatar, Btn, Card, Chips, Divided, Empty, ErrorView, Fab, Files, Grow, IconBtn, Input, LinkText, Loading, PageH, Press, Row, Sub, T, Tag, UpList } from '../ui/kit';
 import { ask, err, sheet, toast } from '../ui/overlay';
-import { Page } from '../ui/Page';
+import { Page, Skeleton } from '../ui/Page';
 
 const B = { board: null as number | null };
 
 // ==================================================================
 // 게시판 목록
 // ==================================================================
-export function BoardView({ id }: { id: number | null }) {
+export function BoardView({ id, nonce }: { id: number | null; nonce?: number }) {
   const c = useColors();
   const boards = useStore((s) => s.data.boards) as any[];
-  if (id) B.board = id;
-  if (!boards.find((b) => b.id === B.board)) B.board = boards[0] ? boards[0].id : null;
-  const board = B.board;
-  const [more, setMore] = useState<{ posts: any[]; has_more: boolean } | null>(null);
-  const q = useLoad(async () => {
-    setMore(null);
-    if (!board) return null;
-    return api('posts', { board_id: board });
+  const pick = (want: number | null) => (boards.find((b) => b.id === want) ? want : boards[0] ? boards[0].id : null);
+  // 고른 게시판은 이 화면 안에서 바로 바꿈 (버튼 · 제목은 다시 그리지 않음)
+  const [board, setBoard] = useState<number | null>(() => pick(id || B.board));
+  // 링크로 다른 게시판(cm/board/2)이 열리면 그 게시판으로
+  const [nav, setNav] = useState({ id, nonce });
+  if (nav.id !== id || nav.nonce !== nonce) {
+    setNav({ id, nonce });
+    if (id) setBoard(pick(id));
+  }
+  useEffect(() => {
+    B.board = board;
   }, [board]);
+  const [more, setMore] = useState<{ board: number | null; posts: any[]; has_more: boolean } | null>(null);
+  const loader = board ? L.posts(board) : null;
+  const q = useLoad(loader ? loader[0] : null, loader ? loader[1] : async () => null);
   if (!boards.length)
     return (
       <Page>
         <Empty style={{ paddingVertical: 60 }}>아직 게시판이 없어요</Empty>
       </Page>
     );
-  const posts = q.data ? (more ? more.posts : q.data.posts) : [];
-  const hasMore = q.data ? (more ? more.has_more : q.data.has_more) : false;
+  const info = boards.find((b) => b.id === board) || {};
+  const d0: any = q.data;
+  const mine = d0 && d0.board && d0.board.id === board;
+  const extra = more && more.board === board && mine ? more : null;
+  const posts = d0 ? (extra ? extra.posts : d0.posts) : [];
+  const hasMore = d0 ? (extra ? extra.has_more : d0.has_more) : false;
   const loadMore = async () => {
     const d = await api('posts', { board_id: board, before: posts[posts.length - 1].id });
-    setMore({ posts: posts.concat(d.posts), has_more: d.has_more });
+    setMore({ board, posts: posts.concat(d.posts), has_more: d.has_more });
   };
+  const desc = mine ? d0.board.description || '' : info.description || (cacheGet(`posts:${board}`)?.board?.description ?? '');
+  const anonymous = mine ? d0.board.anonymous : info.anonymous;
+  const header = (
+    <>
+      <PageH title="게시판" sub={desc || ' '} />
+      <Chips
+        items={boards.map((x) => ({ v: x.id, label: x.name }))}
+        value={board}
+        onChange={(v) => {
+          setMore(null);
+          setBoard(v);
+        }}
+      />
+      {anonymous ? (
+        <Row gap={6} style={{ marginTop: -4, marginHorizontal: 2, marginBottom: 12 }}>
+          <Icon name="eye" size={15} color={c.sub} />
+          <Sub>익명 게시판이에요. 글과 댓글에 이름이 보이지 않아요.</Sub>
+        </Row>
+      ) : null}
+    </>
+  );
+  const canWrite = mine ? d0.board.can_write : info.write_role !== 'admin' || me().is_admin;
   return (
-    <Page q={q} fab={q.data && q.data.board.can_write ? <Fab icon="pen" title="글쓰기" onPress={() => go(`cm/write/${board}`)} /> : null}>
-      {(d: any) => (
-        <>
-          <PageH title="게시판" sub={d.board.description || ''} />
-          <Chips items={boards.map((x) => ({ v: x.id, label: x.name }))} value={board} onChange={(v) => go(`cm/board/${v}`)} />
-          {d.board.anonymous ? (
-            <Row gap={6} style={{ marginTop: -4, marginHorizontal: 2, marginBottom: 12 }}>
-              <Icon name="eye" size={15} color={c.sub} />
-              <Sub>익명 게시판이에요. 글과 댓글에 이름이 보이지 않아요.</Sub>
-            </Row>
+    <Page q={q} header={header} fab={canWrite ? <Fab icon="pen" title="글쓰기" onPress={() => go(`cm/write/${board}`)} /> : null}>
+      {() => (
+        <Card>
+          {posts.length ? (
+            <Divided>
+              {posts.map((p: any) => (
+                <PostRow key={p.id} p={p} />
+              ))}
+            </Divided>
+          ) : (
+            <Empty>아직 글이 없어요. 첫 글을 써보세요!</Empty>
+          )}
+          {hasMore ? (
+            <Press onPress={loadMore} style={{ marginTop: 10, padding: 11, borderRadius: 12, backgroundColor: c.surface2 }}>
+              <Text style={{ fontSize: 13, fontWeight: '600', color: c.sub, textAlign: 'center' }}>더 보기</Text>
+            </Press>
           ) : null}
-          <Card>
-            {posts.length ? (
-              <Divided>
-                {posts.map((p: any) => (
-                  <PostRow key={p.id} p={p} />
-                ))}
-              </Divided>
-            ) : (
-              <Empty>아직 글이 없어요. 첫 글을 써보세요!</Empty>
-            )}
-            {hasMore ? (
-              <Press onPress={loadMore} style={{ marginTop: 10, padding: 11, borderRadius: 12, backgroundColor: c.surface2 }}>
-                <Text style={{ fontSize: 13, fontWeight: '600', color: c.sub, textAlign: 'center' }}>더 보기</Text>
-              </Press>
-            ) : null}
-          </Card>
-        </>
+        </Card>
       )}
     </Page>
   );
@@ -136,7 +159,7 @@ export function SubHeader({ onBack, title, sub, right }: { onBack: () => any; ti
 export function PostScreen({ id }: { id: number }) {
   const c = useColors();
   const insets = useSafeAreaInsets();
-  const q = useLoad(() => api('post', { id }), [id]);
+  const q = useLoad(`post:${id}`, () => api('post', { id }));
   const [comments, setComments] = useState<any[] | null>(null);
   const [replyTo, setReplyTo] = useState<{ id: number; name: string } | null>(null);
   const [like, setLike] = useState<{ on: boolean; n: number } | null>(null);
@@ -145,19 +168,21 @@ export function PostScreen({ id }: { id: number }) {
   const scroll = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const input = useRef<React.ComponentRef<typeof TextInput>>(null);
   const d = q.data;
-  const p = d && d.post;
+  // 받기 전에는 목록에서 본 정보(게시판 · 제목 · 글쓴이)로 위쪽을 먼저 그리고, 본문 자리만 회색 틀
+  const p = d ? d.post : postSeed(id);
+  const loading = !d;
   const boardBack = () => back(p ? 'cm/board/' + p.board_id : 'cm/board');
   if (!p) {
     return (
       <View style={{ flex: 1, backgroundColor: c.surface2 }}>
-        <SubHeader onBack={boardBack} title="게시판" />
-        {q.error ? <ErrorView message={q.error} onRetry={q.reload} /> : <Loading />}
+        <SubHeader onBack={boardBack} title={(getState().data.boards.find((b: any) => b.id === B.board) || {}).name || '게시판'} />
+        {q.error ? <ErrorView message={q.error} onRetry={q.reload} /> : <Skeleton cards={2} style={{ padding: 16 }} />}
       </View>
     );
   }
-  const list: any[] = comments || d.comments;
+  const list: any[] = comments || (d ? d.comments : []);
   const liked = like ? like.on : !!p.liked;
-  const likes = like ? like.n : p.likes;
+  const likes = like ? like.n : p.likes || 0;
 
   const toggleLike = async () => {
     const on = !liked;
@@ -219,7 +244,7 @@ export function PostScreen({ id }: { id: number }) {
             <T style={{ fontWeight: '600', flex: 1, color: c.danger }}>글 삭제</T>
           </Press>
         ) : null}
-      </Divided>
+      </Divided>,
     );
 
   const top = list.filter((x) => !x.parent_id);
@@ -279,25 +304,51 @@ export function PostScreen({ id }: { id: number }) {
               <T style={{ fontWeight: '600' }}>{p.author}</T>
               <Sub>
                 {ago(p.ts)}
-                {p.edited ? ' · 수정됨' : ''} · 조회 {p.views}
+                {p.edited ? ' · 수정됨' : ''}
+                {p.views != null ? ` · 조회 ${p.views}` : ''}
               </Sub>
             </Grow>
           </Row>
           <T style={{ fontSize: 20, fontWeight: '800', letterSpacing: -0.4, marginTop: 10, marginBottom: 12, lineHeight: 27 }} sel>
             {p.title}
           </T>
-          <LinkText text={p.body} style={{ fontSize: 15, lineHeight: 25, color: c.ink2, marginTop: 4 }} />
-          <Files files={p.files} />
+          {loading ? (
+            q.error ? (
+              <ErrorView message={q.error} onRetry={q.reload} />
+            ) : (
+              <Skeleton cards={1} style={{ marginHorizontal: -18 }} />
+            )
+          ) : (
+            <>
+              <LinkText text={p.body} style={{ fontSize: 15, lineHeight: 25, color: c.ink2, marginTop: 4 }} />
+              <Files files={p.files} />
+            </>
+          )}
           <Press
-            onPress={toggleLike}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, paddingHorizontal: 14, borderRadius: 18, borderWidth: 1, borderColor: liked ? c.danger : c.line, backgroundColor: liked ? c.dangerSoft : 'transparent', alignSelf: 'flex-start', marginTop: 16, marginBottom: 6 }}
+            onPress={loading ? undefined : toggleLike}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 6,
+              height: 36,
+              paddingHorizontal: 14,
+              borderRadius: 18,
+              borderWidth: 1,
+              borderColor: liked ? c.danger : c.line,
+              backgroundColor: liked ? c.dangerSoft : 'transparent',
+              alignSelf: 'flex-start',
+              marginTop: 16,
+              marginBottom: 6,
+            }}
           >
             <Icon name="heart" size={16} w={2.2} color={liked ? c.danger : c.ink} />
             <Text style={{ fontSize: 14, fontWeight: '600', color: liked ? c.danger : c.ink }}>공감 {likes}</Text>
           </Press>
         </View>
         <View style={{ backgroundColor: c.surface, marginTop: 8, paddingTop: 6, paddingHorizontal: 16, paddingBottom: 12 }}>
-          {list.length ? (
+          {loading ? (
+            <Sub style={{ paddingTop: 10, paddingBottom: 12, fontWeight: '700' }}>댓글 {p.comments ?? ''}</Sub>
+          ) : list.length ? (
             <>
               <Sub style={{ paddingTop: 10, paddingBottom: 2, fontWeight: '700' }}>댓글 {list.filter((x) => !x.deleted).length}</Sub>
               <Divided>{top.flatMap((cm) => [one(cm), ...replies(cm.id).map((x) => one(x, true))])}</Divided>
@@ -307,7 +358,7 @@ export function PostScreen({ id }: { id: number }) {
           )}
         </View>
       </ScrollView>
-      {p.allow_comments ? (
+      {loading || p.allow_comments ? (
         <>
           {replyTo ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, paddingHorizontal: 16, backgroundColor: c.primarySoft }}>
@@ -322,6 +373,18 @@ export function PostScreen({ id }: { id: number }) {
       ) : null}
     </KeyboardAvoidingView>
   );
+}
+
+/** 게시판 목록에서 본 글 정보 (글 화면을 받기 전에 먼저 보여줄 것) */
+function postSeed(id: number) {
+  for (const [k, v] of cacheEntries('posts:')) {
+    const x = v && v.posts && v.posts.find((p: any) => p.id === id);
+    if (!x) continue;
+    const boardId = Number(k.slice(6));
+    const b = getState().data.boards.find((y: any) => y.id === boardId) || {};
+    return { id, board_id: boardId, board: b.name || '게시판', title: x.title, author: x.author, ts: x.ts, likes: x.likes, comments: x.comments, anon: !!b.anonymous, views: null };
+  }
+  return null;
 }
 
 /** 아래 입력창 (댓글 · 채팅) */
@@ -372,7 +435,7 @@ export function Composer({
 export function WriteScreen({ id, boardId }: { id: number | null; boardId: number | null }) {
   const c = useColors();
   const insets = useSafeAreaInsets();
-  const q = useLoad(async () => (id ? (await api('post', { id, no_view: 1 })).post : null), [id]);
+  const q = useLoad(id ? `edit:${id}` : null, async () => (await api('post', { id, no_view: 1 })).post);
   const p = q.data;
   const ready = !id || !!p;
   const bId = p ? p.board_id : boardId;
@@ -408,9 +471,7 @@ export function WriteScreen({ id, boardId }: { id: number | null; boardId: numbe
       router.replace({ pathname: '/post/[id]', params: { id: String(r.id) } });
     }
   };
-  const header = (
-    <SubHeader onBack={leave} title={id ? '글 수정' : '글쓰기'} sub={b ? b.name : ''} right={ready && b ? <Btn sm title={id ? '저장' : '올리기'} onPress={save} style={{ marginRight: 4 }} /> : null} />
-  );
+  const header = <SubHeader onBack={leave} title={id ? '글 수정' : '글쓰기'} sub={b ? b.name : ''} right={ready && b ? <Btn sm title={id ? '저장' : '올리기'} onPress={save} style={{ marginRight: 4 }} /> : null} />;
   if (!ready || !b) {
     return (
       <View style={{ flex: 1, backgroundColor: c.surface }}>

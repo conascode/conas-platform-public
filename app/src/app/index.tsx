@@ -4,11 +4,14 @@
  *  - 가운데: 홈 / WS(업무 · 근태 · 서류 · 공지 · 내 정보) / CM(게시판 · 채널 · 임직원) / DM / 전체
  *  - 아래: 홈 하단바, 또는 WS · CM 안에서는 뒤로가기 + 떠 있는 알약 모양 하단바
  */
-import React, { useCallback, useEffect, useRef } from 'react';
-import { AppState, BackHandler, Image, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Animated, AppState, BackHandler, Easing, Image, StyleSheet, Text, View } from 'react-native';
+import { useAnim } from '../ui/anim';
 import { useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api } from '../lib/api';
+import { ActiveContext } from '../lib/hooks';
+import { prefetchAll, prefetchPath } from '../lib/loaders';
 import { go, refresh, setBadges, useColors, useStore } from '../lib/store';
 import { Icon } from '../ui/Icon';
 import { Avatar, IconBtn, Press } from '../ui/kit';
@@ -71,6 +74,87 @@ function TopBar() {
   );
 }
 
+// ------------------------------------------------------------------
+// 하단바 (웹 spa.css 의 .nav 움직임과 같게)
+//  - 홈 바 ↔ 떠 있는 알약: 여백 · 모서리가 통통 튀며 바뀜
+//  - WS · CM에 들어가면 메뉴가 하나씩 차례로 올라오고, 뒤로 버튼은 돌면서 나타남
+//  - 같은 묶음 안에서 탭을 바꾸면 새로 고른 아이콘이 작아졌다 커지며 튐
+//  - 고른 아이콘 · 글자는 색이 부드럽게 바뀜
+// ------------------------------------------------------------------
+const SPRING = { friction: 6, tension: 90, useNativeDriver: true };
+
+function NavItem({ label, icon, on, index, enter, dot, onPress, onPressIn }: { label: string; icon: string; on: boolean; index: number; enter: boolean; dot: boolean; onPress: () => void; onPressIn: () => void }) {
+  const c = useColors();
+  const appear = useAnim(enter ? 0 : 1);
+  const pop = useAnim(1);
+  const sel = useAnim(on ? 1 : 0);
+  const wasOn = useRef(on);
+  useEffect(() => {
+    if (enter) Animated.spring(appear, { ...SPRING, toValue: 1, delay: index * 50 + 60 }).start();
+  }, []);
+  useEffect(() => {
+    Animated.timing(sel, { toValue: on ? 1 : 0, duration: 250, useNativeDriver: true }).start();
+    if (on && !wasOn.current) {
+      Animated.sequence([
+        Animated.timing(pop, { toValue: 0.74, duration: 190, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+        Animated.timing(pop, { toValue: 1.14, duration: 190, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+        Animated.spring(pop, { ...SPRING, toValue: 1 }),
+      ]).start();
+    }
+    wasOn.current = on;
+  }, [on]);
+  const off = sel.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
+  return (
+    <Animated.View
+      style={{
+        flex: 1,
+        opacity: appear.interpolate({ inputRange: [0, 1], outputRange: [0, 1], extrapolate: 'clamp' }),
+        transform: [{ translateY: appear.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }, { scale: appear.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1] }) }],
+      }}
+    >
+      <Press onPress={onPress} onPressIn={onPressIn} style={st.navItem} pressedStyle={{ transform: [{ scale: 0.9 }] }} label={label}>
+        <Animated.View style={{ transform: [{ scale: pop }] }}>
+          <Animated.View style={{ opacity: off }}>
+            <Icon name={icon} size={24} w={1.9} color={c.faint} />
+          </Animated.View>
+          <Animated.View style={[StyleSheet.absoluteFill, { opacity: sel }]}>
+            <Icon name={icon} size={24} filled color={c.ink} />
+          </Animated.View>
+          {dot ? <View style={[st.navDot, { backgroundColor: c.danger, borderColor: c.surface }]} /> : null}
+        </Animated.View>
+        <View>
+          <Animated.Text style={{ fontSize: 12, fontWeight: '600', color: c.faint, opacity: off }}>{label}</Animated.Text>
+          <Animated.Text style={{ position: 'absolute', left: 0, right: 0, textAlign: 'center', fontSize: 12, fontWeight: '700', color: c.ink, opacity: sel }}>{label}</Animated.Text>
+        </View>
+      </Press>
+    </Animated.View>
+  );
+}
+
+function NavBack({ enter }: { enter: boolean }) {
+  const c = useColors();
+  const a = useAnim(enter ? 0 : 1);
+  useEffect(() => {
+    if (enter) Animated.spring(a, { ...SPRING, toValue: 1 }).start();
+  }, []);
+  return (
+    <Animated.View
+      style={{
+        opacity: a.interpolate({ inputRange: [0, 1], outputRange: [0, 1], extrapolate: 'clamp' }),
+        transform: [
+          { translateX: a.interpolate({ inputRange: [0, 1], outputRange: [-28, 0] }) },
+          { scale: a.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }) },
+          { rotate: a.interpolate({ inputRange: [0, 1], outputRange: ['-60deg', '0deg'] }) },
+        ],
+      }}
+    >
+      <Press onPress={() => go('home')} label="홈으로" style={[st.navBack, { backgroundColor: c.surface2 }]} pressedStyle={{ transform: [{ scale: 0.86 }] }}>
+        <Icon name="arrowL" size={24} w={2.2} color={c.ink2} />
+      </Press>
+    </Animated.View>
+  );
+}
+
 function BottomNav() {
   const c = useColors();
   const insets = useSafeAreaInsets();
@@ -78,77 +162,119 @@ function BottomNav() {
   const b = useStore((s) => s.badges);
   const group = ['home', 'dm', 'all'].includes(main.sec) ? 'home' : main.sec;
   const active = group === 'home' ? main.sec : main.tab;
+  // 묶음(홈 / WS / CM)이 바뀌었을 때만 메뉴가 차례로 올라옴 (앱을 처음 켤 때는 그대로)
+  const [prevGroup, setPrevGroup] = useState(group);
+  const [entered, setEntered] = useState<string | null>(null);
+  if (prevGroup !== group) {
+    setPrevGroup(group);
+    setEntered(group);
+  }
+  const enter = entered === group;
+  const sub = group !== 'home';
+  const morph = useAnim(sub ? 1 : 0);
+  useEffect(() => {
+    Animated.spring(morph, { toValue: sub ? 1 : 0, friction: 7, tension: 60, useNativeDriver: false }).start();
+  }, [sub]);
+  const m = (a: number, z: number) => morph.interpolate({ inputRange: [0, 1], outputRange: [a, z], extrapolate: 'clamp' });
   const dot = (key: string) => {
-    if (group === 'home') return (key === 'ws' && (b.task || b.approval || b.notice)) || (key === 'cm' && b.channel) || (key === 'dm' && b.dm) || (key === 'all' && b.pending);
-    if (group === 'ws') return (key === 'task' && b.task) || (key === 'doc' && b.approval) || (key === 'notice' && b.notice);
-    if (group === 'cm') return key === 'chan' && b.channel;
+    if (group === 'home') return !!((key === 'ws' && (b.task || b.approval || b.notice)) || (key === 'cm' && b.channel) || (key === 'dm' && b.dm) || (key === 'all' && b.pending));
+    if (group === 'ws') return !!((key === 'task' && b.task) || (key === 'doc' && b.approval) || (key === 'notice' && b.notice));
+    if (group === 'cm') return !!(key === 'chan' && b.channel);
     return false;
   };
-  const sub = group !== 'home';
   return (
-    <View
+    <Animated.View
       style={[
         st.nav,
-        { backgroundColor: c.surface, shadowColor: '#000' },
+        {
+          backgroundColor: c.surface,
+          shadowColor: '#000',
+          marginHorizontal: m(0, 12),
+          marginBottom: m(0, 12 + insets.bottom),
+          paddingTop: m(10, 8),
+          paddingBottom: m(10 + insets.bottom, 8),
+          paddingHorizontal: 8,
+          borderTopLeftRadius: m(28, 40),
+          borderTopRightRadius: m(28, 40),
+          borderBottomLeftRadius: m(0, 40),
+          borderBottomRightRadius: m(0, 40),
+        },
         sub
-          ? { marginHorizontal: 12, marginBottom: 12 + insets.bottom, padding: 8, borderRadius: 40, shadowOpacity: c.dark ? 0.55 : 0.16, shadowRadius: 16, shadowOffset: { width: 0, height: 12 }, elevation: 10 }
-          : { paddingTop: 10, paddingHorizontal: 8, paddingBottom: 10 + insets.bottom, borderTopLeftRadius: 28, borderTopRightRadius: 28, shadowOpacity: c.dark ? 0.4 : 0.07, shadowRadius: 12, shadowOffset: { width: 0, height: -6 }, elevation: 12 },
+          ? { shadowOpacity: c.dark ? 0.55 : 0.16, shadowRadius: 16, shadowOffset: { width: 0, height: 12 }, elevation: 10 }
+          : { shadowOpacity: c.dark ? 0.4 : 0.07, shadowRadius: 12, shadowOffset: { width: 0, height: -6 }, elevation: 12 },
       ]}
     >
-      {sub ? (
-        <Press onPress={() => go('home')} label="홈으로" style={[st.navBack, { backgroundColor: c.surface2 }]} pressedStyle={{ transform: [{ scale: 0.86 }] }}>
-          <Icon name="arrowL" size={24} w={2.2} color={c.ink2} />
-        </Press>
-      ) : null}
-      {NAV[group].map(([k, l, i, to]) => {
-        const on = k === active;
+      {sub ? <NavBack key={'back:' + group} enter={enter} /> : null}
+      {NAV[group].map(([k, l, i, to], n) => {
+        const path = to || `${group}/${k}`;
         return (
-          <Press key={k} onPress={() => go(to || `${group}/${k}`)} style={st.navItem} pressedStyle={{ transform: [{ scale: 0.9 }] }} label={l}>
-            <View>
-              <Icon name={i} size={24} w={1.9} filled={on} color={on ? c.ink : c.faint} />
-              {dot(k) ? <View style={[st.navDot, { backgroundColor: c.danger, borderColor: c.surface }]} /> : null}
-            </View>
-            <Text style={{ fontSize: 12, fontWeight: on ? '700' : '600', color: on ? c.ink : c.faint }}>{l}</Text>
-          </Press>
+          <NavItem
+            key={group + ':' + k}
+            label={l}
+            icon={i}
+            on={k === active}
+            index={n}
+            enter={enter}
+            dot={dot(k)}
+            onPressIn={() => prefetchPath(path)}
+            onPress={() => go(path)}
+          />
         );
       })}
-    </View>
+    </Animated.View>
   );
 }
 
+// ------------------------------------------------------------------
+// 가운데 화면: 한 번 연 탭은 지우지 않고 숨겨둠 (돌아오면 스크롤 위치까지 그대로)
+// ------------------------------------------------------------------
+type Nav = { id: number | null; nonce?: number };
+const VIEWS: Record<string, (n: Nav) => React.ReactNode> = {
+  'home/home': () => <HomeView />,
+  'ws/task': () => <TaskView />,
+  'ws/att': () => <AttView />,
+  'ws/doc': () => <DocView />,
+  'ws/notice': (n) => <NoticeView id={n.id} nonce={n.nonce} />,
+  'ws/me': () => <MeView />,
+  'cm/board': (n) => <BoardView id={n.id} nonce={n.nonce} />,
+  'cm/chan': () => <ChanView />,
+  'cm/people': () => <PeopleView />,
+  'dm/dm': () => <DmView />,
+  'all/all': () => <AllView />,
+};
+
 function Content() {
   const main = useStore((s) => s.main);
-  const key = `${main.sec}/${main.tab}`;
-  switch (key) {
-    case 'ws/task':
-      return <TaskView />;
-    case 'ws/att':
-      return <AttView />;
-    case 'ws/doc':
-      return <DocView />;
-    case 'ws/notice':
-      return <NoticeView id={main.id} />;
-    case 'ws/me':
-      return <MeView />;
-    case 'cm/board':
-      return <BoardView id={main.id} />;
-    case 'cm/chan':
-      return <ChanView />;
-    case 'cm/people':
-      return <PeopleView />;
-    case 'dm/dm':
-      return <DmView />;
-    case 'all/all':
-      return <AllView />;
-    default:
-      return <HomeView />;
-  }
+  const want = `${main.sec}/${main.tab}`;
+  const key = VIEWS[want] ? want : 'home/home';
+  const cur: Nav = { id: main.id, nonce: main.nonce };
+  const [seen, setSeen] = useState<string[]>([key]);
+  // 탭마다 마지막으로 받은 id (숨겨진 탭은 자기 것을 그대로 가짐)
+  const [navs, setNavs] = useState<Record<string, Nav>>({ [key]: cur });
+  if (!seen.includes(key)) setSeen([...seen, key]);
+  const old = navs[key];
+  if (!old || old.id !== cur.id || old.nonce !== cur.nonce) setNavs({ ...navs, [key]: cur });
+  const list = seen.includes(key) ? seen : [...seen, key];
+  return (
+    <View style={{ flex: 1 }}>
+      {list.map((k) => (
+        <View key={k} style={[StyleSheet.absoluteFill, k !== key && st.hidden]}>
+          <ActiveContext.Provider value={k === key}>{VIEWS[k](k === key ? cur : navs[k] || { id: null })}</ActiveContext.Provider>
+        </View>
+      ))}
+    </View>
+  );
 }
 
 export default function MainScreen() {
   const c = useColors();
   const ready = useStore((s) => s.auth === 'ready' && !!s.data);
   const main = useStore((s) => s.main);
+
+  // 로그인하면 주요 화면 데이터를 뒤에서 미리 받아둠 (처음 여는 화면도 바로 보이게)
+  useEffect(() => {
+    if (ready) prefetchAll();
+  }, [ready]);
 
   // 배지 숫자 갱신 (앱이 보이는 동안 20초마다)
   useEffect(() => {
@@ -219,5 +345,6 @@ const st = StyleSheet.create({
   nav: { flexDirection: 'row', alignItems: 'center', gap: 2, zIndex: 6 },
   navItem: { flex: 1, alignItems: 'center', gap: 4, paddingTop: 6, paddingBottom: 4 },
   navBack: { width: 54, height: 54, borderRadius: 27, alignItems: 'center', justifyContent: 'center', marginRight: 6 },
+  hidden: { display: 'none' },
   navDot: { position: 'absolute', top: -2, right: -5, width: 9, height: 9, borderRadius: 5, borderWidth: 2 },
 });

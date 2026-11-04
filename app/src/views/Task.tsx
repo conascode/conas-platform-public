@@ -7,8 +7,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { api, post } from '../lib/api';
-import { useLoad } from '../lib/hooks';
+import { post } from '../lib/api';
+import { prefetch, useLoad } from '../lib/hooks';
+import { L } from '../lib/loaders';
 import { back, getState, go, isCeo, me, mem, refresh, setBadges, useColors, useStore } from '../lib/store';
 import { addDays, ddayCls, ddayLabel, iso, md, roleLabel, ROLE, today } from '../lib/util';
 import { Icon } from '../ui/Icon';
@@ -35,7 +36,6 @@ import {
   Input,
   KV,
   ListItem,
-  Loading,
   More,
   OptGroup,
   PageH,
@@ -53,7 +53,7 @@ import {
   Timeline,
 } from '../ui/kit';
 import { ask, err, sheet, toast } from '../ui/overlay';
-import { Page } from '../ui/Page';
+import { Page, Skeleton } from '../ui/Page';
 import { openPerson } from './People';
 
 const done = (msg?: string) => {
@@ -87,15 +87,20 @@ export function TaskView() {
   }, [view, showDone]);
   // 다른 사람에게 업무를 배정하면 '팀 전체'로 바꿔 보여줌
   const rk = useStore((s) => s.refreshKey);
-  useEffect(() => {
+  const [seenRk, setSeenRk] = useState(rk);
+  if (seenRk !== rk) {
+    setSeenRk(rk);
     if (leader && T_.view !== view) setView(T_.view);
-  }, [rk]);
-  const q = useLoad(async () => {
-    const d = await api('tasks', { view });
+  }
+  const [key, load] = L.tasks(view);
+  const q = useLoad(key, async () => {
+    const d = await load();
     setBadges(d.badges);
-    T_.data = d;
     return d;
-  }, [view]);
+  });
+  useEffect(() => {
+    if (q.data) T_.data = q.data;
+  }, [q.data]);
 
   return (
     <Page q={q} fab={<Fab icon="plus" title={me().assignable.length ? '업무 추가' : '할 일 추가'} onPress={() => openTaskNew()} />}>
@@ -252,11 +257,7 @@ function TaskRow({ t, noProject }: { t: any; noProject?: boolean }) {
   const isRv = t.status === 'review';
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 }}>
-      <Press
-        onPress={() => openTask(t.id)}
-        label="업무 상세"
-        style={[st.tchk, { borderColor: isDone ? c.ok : isRv ? c.leave : c.line2, backgroundColor: isDone ? c.ok : isRv ? c.leaveSoft : 'transparent' }]}
-      >
+      <Press onPress={() => openTask(t.id)} label="업무 상세" style={[st.tchk, { borderColor: isDone ? c.ok : isRv ? c.leave : c.line2, backgroundColor: isDone ? c.ok : isRv ? c.leaveSoft : 'transparent' }]}>
         {isRv ? <Icon name="clock" size={14} w={2.6} color={c.leave} /> : isDone ? <Icon name="check" size={14} w={3} color="#fff" /> : null}
       </Press>
       <Press onPress={() => openTask(t.id)} style={{ flex: 1, minWidth: 0 }}>
@@ -287,7 +288,7 @@ function ProjectCard({ p }: { p: any }) {
   const label: Record<string, [string, string]> = { late: ['no', '지연'], warn: ['late', '주의'], ok: ['ok', '순조'] };
   const [k, l] = label[p.state] || label.ok;
   return (
-    <Press onPress={() => go(`ws/project/${p.id}`)} style={{ padding: 16, borderRadius: 16, backgroundColor: c.surface3 }}>
+    <Press onPressIn={() => prefetch(...L.project(p.id))} onPress={() => go(`ws/project/${p.id}`)} style={{ padding: 16, borderRadius: 16, backgroundColor: c.surface3 }}>
       <Row style={{ justifyContent: 'space-between' }}>
         <T style={{ fontWeight: '600', flex: 1 }} lines={1}>
           {p.name}
@@ -326,12 +327,13 @@ export function ProjectScreen({ id }: { id: number }) {
   const c = useColors();
   const insets = useSafeAreaInsets();
   const [filter, setFilter] = useState<string | null>(null);
-  const q = useLoad(async () => {
-    const d = await api('project', { id });
+  const [key, load] = L.project(id);
+  const q = useLoad(key, load);
+  useEffect(() => {
+    if (!q.data) return;
     PJ.id = id;
-    PJ.data = d;
-    return d;
-  }, [id]);
+    PJ.data = q.data;
+  }, [q.data, id]);
   useEffect(() => {
     PJ.open = true;
     return () => {
@@ -343,11 +345,16 @@ export function ProjectScreen({ id }: { id: number }) {
   const PILL = 92;
 
   const d = q.data;
-  const p = d && d.project;
+  // 받기 전에는 업무 탭에서 본 프로젝트 정보로 위쪽(이름 · 단계 줄 · 요약)을 먼저 그림
+  const seed = !d && T_.data ? T_.data.projects.find((x: any) => x.id === id) : null;
+  const p = d ? d.project : seed;
   const cur = p ? p.current_index : 0;
   const center = (sid: string | null, animated: boolean) => {
     if (!p || !barW) return;
-    const i = Math.max(0, p.stages.findIndex((s: any) => s.id === (sid || p.current)));
+    const i = Math.max(
+      0,
+      p.stages.findIndex((s: any) => s.id === (sid || p.current)),
+    );
     bar.current?.scrollTo({ x: i * PILL, animated });
   };
   useEffect(() => {
@@ -375,11 +382,11 @@ export function ProjectScreen({ id }: { id: number }) {
     return (
       <View style={{ flex: 1, backgroundColor: c.surface2 }}>
         {head}
-        {q.error ? <ErrorView message={q.error} onRetry={q.reload} /> : <Loading />}
+        {q.error ? <ErrorView message={q.error} onRetry={q.reload} /> : <Skeleton />}
       </View>
     );
   }
-  const tasks = d.tasks;
+  const tasks: any[] = d ? d.tasks : [];
   const sel = filter;
   const selStage = sel ? p.stages.find((s: any) => s.id === sel) : null;
   const ids = new Set(p.stages.map((s: any) => s.id));
@@ -473,45 +480,53 @@ export function ProjectScreen({ id }: { id: number }) {
             )}
           </View>
         </Card>
-        <Card>
-          {shown.length || (!sel && noStage.length) ? (
-            <>
-              {shown.map((s: any, k: number) => {
-                const i = p.stages.indexOf(s);
-                const list = tasks.filter((t: any) => t.stage_id === s.id);
-                return (
-                  <View key={s.id} style={k > 0 ? [st.stageGrpSep, { borderTopColor: c.line }] : null}>
-                    <View style={st.stageGrpH}>
-                      <StageNo n={i + 1} />
-                      <T style={{ fontWeight: '700' }}>{s.name}</T>
-                      {i === cur ? <Tag kind="primary">현재</Tag> : i < cur ? <Tag>지난 단계</Tag> : null}
-                      <Grow />
-                      <Sub>
-                        {s.done}/{s.total}
-                      </Sub>
-                      <IconBtn name="plus" size={18} w={2.2} color={c.primary} label="이 단계에 업무 추가" style={{ width: 32, height: 32 }} onPress={() => openTaskNew(p.id, s.id)} />
-                    </View>
-                    {list.length ? list.map((t: any) => <TaskRow key={t.id} t={t} noProject />) : <Sub style={{ paddingTop: 6, paddingBottom: 10 }}>이 단계에는 아직 업무가 없어요</Sub>}
-                  </View>
-                );
-              })}
-              {!sel && noStage.length ? (
-                <View style={shown.length ? [st.stageGrpSep, { borderTopColor: c.line }] : null}>
-                  <View style={st.stageGrpH}>
-                    <T style={{ fontWeight: '700' }}>단계 없음</T>
-                    <Grow />
-                    <Sub>{noStage.length}</Sub>
-                  </View>
-                  {noStage.map((t: any) => (
-                    <TaskRow key={t.id} t={t} noProject />
-                  ))}
-                </View>
-              ) : null}
-            </>
+        {!d ? (
+          q.error ? (
+            <ErrorView message={q.error} onRetry={q.reload} />
           ) : (
-            <Empty>아직 업무가 없어요</Empty>
-          )}
-        </Card>
+            <Skeleton cards={1} />
+          )
+        ) : (
+          <Card>
+            {shown.length || (!sel && noStage.length) ? (
+              <>
+                {shown.map((s: any, k: number) => {
+                  const i = p.stages.indexOf(s);
+                  const list = tasks.filter((t: any) => t.stage_id === s.id);
+                  return (
+                    <View key={s.id} style={k > 0 ? [st.stageGrpSep, { borderTopColor: c.line }] : null}>
+                      <View style={st.stageGrpH}>
+                        <StageNo n={i + 1} />
+                        <T style={{ fontWeight: '700' }}>{s.name}</T>
+                        {i === cur ? <Tag kind="primary">현재</Tag> : i < cur ? <Tag>지난 단계</Tag> : null}
+                        <Grow />
+                        <Sub>
+                          {s.done}/{s.total}
+                        </Sub>
+                        <IconBtn name="plus" size={18} w={2.2} color={c.primary} label="이 단계에 업무 추가" style={{ width: 32, height: 32 }} onPress={() => openTaskNew(p.id, s.id)} />
+                      </View>
+                      {list.length ? list.map((t: any) => <TaskRow key={t.id} t={t} noProject />) : <Sub style={{ paddingTop: 6, paddingBottom: 10 }}>이 단계에는 아직 업무가 없어요</Sub>}
+                    </View>
+                  );
+                })}
+                {!sel && noStage.length ? (
+                  <View style={shown.length ? [st.stageGrpSep, { borderTopColor: c.line }] : null}>
+                    <View style={st.stageGrpH}>
+                      <T style={{ fontWeight: '700' }}>단계 없음</T>
+                      <Grow />
+                      <Sub>{noStage.length}</Sub>
+                    </View>
+                    {noStage.map((t: any) => (
+                      <TaskRow key={t.id} t={t} noProject />
+                    ))}
+                  </View>
+                ) : null}
+              </>
+            ) : (
+              <Empty>아직 업무가 없어요</Empty>
+            )}
+          </Card>
+        )}
       </ScrollView>
       <Fab low icon="plus" title={`${sel && selStage ? selStage.name + '에 ' : ''}업무 추가`} onPress={() => openTaskNew(p.id, sel || p.current)} />
     </View>
@@ -526,7 +541,6 @@ function StageNo({ n }: { n: number | string }) {
     </View>
   );
 }
-
 
 // ==================================================================
 // 업무 상세 · 완료 흐름
@@ -839,9 +853,7 @@ function ProjectForm({ p }: { p: any | null }) {
   const [review, setReview] = useState<boolean>(p ? !!p.require_review : true);
   const [editDone, setEditDone] = useState<number>(p ? p.edit_done || 0 : 0);
   const [archive, setArchive] = useState(false);
-  const [members, setMembers] = useState<Set<number>>(
-    new Set(p ? p.members : data.members.filter((m: any) => m.id === me().id || (me().team_id && m.team_id === me().team_id && m.role !== 'ceo')).map((m: any) => m.id))
-  );
+  const [members, setMembers] = useState<Set<number>>(new Set(p ? p.members : data.members.filter((m: any) => m.id === me().id || (me().team_id && m.team_id === me().team_id && m.role !== 'ceo')).map((m: any) => m.id)));
   const people = [...data.members].sort((a: any, b: any) => Number(b.team_id === myTeam) - Number(a.team_id === myTeam));
   const curIdx = Math.min(cur, stages.length - 1);
 

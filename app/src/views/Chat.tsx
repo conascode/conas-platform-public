@@ -3,7 +3,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { AppState, Image, KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { abs, api, legacy, post, upload } from '../lib/api';
-import { useLoad } from '../lib/hooks';
+import { cacheGet, cacheSet, useActive, useLoad } from '../lib/hooks';
+import { L, prefetchChat } from '../lib/loaders';
 import { back, getState, go, me, mem, refresh, rememberConv, setState, useColors, useStore } from '../lib/store';
 import { ago, hm, iso, md, roleLabel, ROLE } from '../lib/util';
 import { Icon } from '../ui/Icon';
@@ -31,7 +32,6 @@ import {
   Input,
   LinkText,
   ListItem,
-  Loading,
   NewBtn,
   PageH,
   Press,
@@ -62,14 +62,14 @@ async function loadChats() {
 // ==================================================================
 export function ChanView() {
   const c = useColors();
-  const q = useLoad(loadChats, []);
+  const q = useLoad('chats', loadChats);
   return (
-    <Page q={q}>
+    <Page q={q} header={<PageH title="채널" sub="누구나 들어갈 수 있는 대화방이에요" right={<NewBtn icon="plus" title="채널 만들기" onPress={() => openChanEdit(null)} />} />}>
       {(d: any) => {
         const joined = d.channels.filter((x: any) => x.joined);
         const others = d.channels.filter((x: any) => !x.joined);
         const row = (ch: any) => (
-          <ListItem key={ch.id} onPress={() => go(`chat/${ch.id}?from=cm`)}>
+          <ListItem key={ch.id} onPressIn={() => prefetchChat(ch.id)} onPress={() => go(`chat/${ch.id}?from=cm`)}>
             <ChanIc />
             <Grow>
               <T lines={1} style={{ fontWeight: '600' }}>
@@ -82,7 +82,6 @@ export function ChanView() {
         );
         return (
           <>
-            <PageH title="채널" sub="누구나 들어갈 수 있는 대화방이에요" right={<NewBtn icon="plus" title="채널 만들기" onPress={() => openChanEdit(null)} />} />
             <Card>{joined.length ? <Divided>{joined.map(row)}</Divided> : <Empty>참여 중인 채널이 없어요</Empty>}</Card>
             {others.length ? (
               <Card>
@@ -132,14 +131,15 @@ function ChanEdit({ info }: { info: any | null }) {
 const DL = { q: '' };
 export function DmView() {
   const [qs, setQs] = useState(DL.q);
-  const q = useLoad(loadChats, []);
+  const active = useActive();
+  const q = useLoad('chats', loadChats);
   // 목록 새로고침 (5초마다, 앱이 보이고 창이 닫혀 있을 때만)
   useEffect(() => {
     let t: any;
     let alive = true;
     const tick = async () => {
       if (!alive) return;
-      if (AppState.currentState === 'active' && !sheet.open) {
+      if (active && AppState.currentState === 'active' && !sheet.open) {
         try {
           const n = await loadChats();
           if (alive && JSON.stringify(n.dms) !== JSON.stringify(q.data?.dms)) q.setData(n);
@@ -154,29 +154,30 @@ export function DmView() {
       alive = false;
       clearTimeout(t);
     };
-  }, [q.data]);
+  }, [q.data, active]);
+  // 제목 · 검색창은 데이터를 다시 받아도 그대로
+  const header = (
+    <>
+      <PageH title="DM" sub="1:1 · 단체 대화" right={<NewBtn icon="pen" title="새 대화" onPress={() => openPicker('new')} />} />
+      <SearchBox
+        value={qs}
+        onChange={(v) => {
+          DL.q = v;
+          setQs(v);
+        }}
+        placeholder="이름, 대화방 검색"
+      />
+    </>
+  );
   return (
-    <Page q={q}>
+    <Page q={q} header={header}>
       {(d: any) => {
         const s = qs.trim().toLowerCase();
         const list = s ? d.dms.filter((x: any) => (x.title + ' ' + (x.sub || '')).toLowerCase().includes(s)) : d.dms;
         return (
           <>
-            <PageH title="DM" sub="1:1 · 단체 대화" right={<NewBtn icon="pen" title="새 대화" onPress={() => openPicker('new')} />} />
-            <SearchBox
-              value={qs}
-              onChange={(v) => {
-                DL.q = v;
-                setQs(v);
-              }}
-              placeholder="이름, 대화방 검색"
-            />
             <Card style={{ paddingVertical: 6, paddingHorizontal: 8 }}>
-              {list.length ? (
-                list.map((x: any) => <DmRow key={x.id} c={x} />)
-              ) : (
-                <Empty>{s ? '찾는 대화가 없어요' : '아직 대화가 없어요.\n새 대화를 눌러 시작해 보세요.'}</Empty>
-              )}
+              {list.length ? list.map((x: any) => <DmRow key={x.id} c={x} />) : <Empty>{s ? '찾는 대화가 없어요' : '아직 대화가 없어요.\n새 대화를 눌러 시작해 보세요.'}</Empty>}
             </Card>
           </>
         );
@@ -189,7 +190,12 @@ function DmRow({ c: x }: { c: any }) {
   const c = useColors();
   const who = x.last_mine ? '나: ' : x.type === 'group' && x.last_name ? x.last_name + ': ' : '';
   return (
-    <Press onPress={() => go(`chat/${x.id}`)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingHorizontal: 10, borderRadius: 14 }} pressedStyle={{ backgroundColor: c.surface2 }}>
+    <Press
+      onPressIn={() => prefetchChat(x.id)}
+      onPress={() => go(`chat/${x.id}`)}
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingHorizontal: 10, borderRadius: 14 }}
+      pressedStyle={{ backgroundColor: c.surface2 }}
+    >
       {x.type === 'dm' ? <Avatar m={{ name: x.title, av: x.av, online: x.online }} size={50} /> : <GroupAv avs={x.avs} size={50} />}
       <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
         <Row gap={5}>
@@ -315,7 +321,7 @@ function ChatHead({ info, onInfo }: { info: any; onInfo: () => void }) {
   let onPress = onInfo;
   if (info.type === 'channel') {
     av = <ChanIc size={36} />;
-    sub = info.description || info.members.length + '명 참여 중';
+    sub = info.description || (info.members.length || info.member_count || 0) + '명 참여 중';
   } else if (info.type === 'dm' && info.other) {
     const o = info.other;
     av = <Avatar m={o} size={38} />;
@@ -324,7 +330,7 @@ function ChatHead({ info, onInfo }: { info: any; onInfo: () => void }) {
     onPress = () => openPerson(o.id);
   } else {
     av = <GroupAv avs={info.members.filter((m: any) => m.id !== me().id)} size={38} />;
-    sub = info.members.length + '명';
+    sub = (info.members.length || info.member_count || 0) + '명';
   }
   return (
     <Press onPress={onPress} style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6, paddingHorizontal: 6, borderRadius: 12 }}>
@@ -343,19 +349,45 @@ function ChatHead({ info, onInfo }: { info: any; onInfo: () => void }) {
 
 type Msg = any;
 
+/** 채널 · DM 목록에서 본 대화방 정보 (대화방 정보를 받기 전에 머리글용) */
+function chatSeed(id: number) {
+  const l = cacheGet('chats');
+  if (!l) return null;
+  const ch = l.channels.find((x: any) => x.id === id);
+  if (ch) return { id, type: 'channel', title: ch.name, description: ch.description, member_count: ch.member_count, members: [], joined: ch.joined, seed: true };
+  const dm = l.dms.find((x: any) => x.id === id);
+  if (!dm) return null;
+  if (dm.type === 'dm') return { id, type: 'dm', title: dm.title, other: { name: dm.title, av: dm.av, online: dm.online }, members: [], joined: true, seed: true };
+  return { id, type: 'group', title: dm.title, member_count: dm.member_count, members: dm.avs || [], joined: true, seed: true };
+}
+
 export function ChatScreen({ id }: { id: number }) {
   const c = useColors();
   const insets = useSafeAreaInsets();
-  const [info, setInfo] = useState<any>(null);
+  // 전에 본 대화방이거나 미리 받아둔 게 있으면 바로 보여주고, 뒤에서 새로 받음
+  const [c0] = useState(() => ({ info: cacheGet(L.chatInfo(id)[0]) || null, m: cacheGet(L.chatMsgs(id)[0]) || null }));
+  const [real, setInfo] = useState<any>(c0.info);
   const [error, setError] = useState('');
-  const [msgs, setMsgs] = useState<Msg[] | null>(null);
-  const [reads, setReads] = useState<Record<string, number>>({});
-  const [hasMore, setHasMore] = useState(false);
+  const [msgs, setMsgs] = useState<Msg[] | null>(c0.m ? c0.m.messages : null);
+  const [reads, setReads] = useState<Record<string, number>>(c0.m ? c0.m.reads || {} : {});
+  const [hasMore, setHasMore] = useState(c0.m ? !!c0.m.has_more : false);
   const [text, setText] = useState('');
   const [view, setView] = useState<any>(null);
-  const S = useRef({ since: 0, msgs: [] as Msg[], reads: {} as Record<string, number>, pending: new Set<string>(), near: true, alive: true, info: null as any });
+  const S = useRef({
+    since: c0.m ? c0.m.since || 0 : 0,
+    msgs: (c0.m ? c0.m.messages : []) as Msg[],
+    reads: (c0.m ? c0.m.reads || {} : {}) as Record<string, number>,
+    pending: new Set<string>(),
+    near: true,
+    alive: true,
+    info: c0.info as any,
+  });
   const scroll = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const stick = useRef(true);
+  const hasMoreRef = useRef(hasMore);
+  useEffect(() => {
+    hasMoreRef.current = hasMore;
+  }, [hasMore]);
 
   const setM = (l: Msg[]) => {
     S.current.msgs = l;
@@ -384,16 +416,18 @@ export function ChatScreen({ id }: { id: number }) {
   };
 
   const load = async () => {
-    setError('');
     try {
       const i = await api('chat.info', { c: id });
       if (!S.current.alive) return;
+      setError('');
+      cacheSet(L.chatInfo(id)[0], i);
       S.current.info = i;
       setInfo(i);
       rememberConv(id, i.type);
       if (!i.joined) return;
       const d = await legacy('messages.php', { c: id });
       if (!S.current.alive) return;
+      cacheSet(L.chatMsgs(id)[0], d);
       S.current.since = d.since || 0;
       setR(d.reads || {});
       setHasMore(d.has_more);
@@ -404,11 +438,20 @@ export function ChatScreen({ id }: { id: number }) {
       setError(e.message);
     }
   };
+  const retry = () => {
+    setError('');
+    load();
+  };
   useEffect(() => {
-    S.current.alive = true;
+    const cur = S.current;
+    cur.alive = true;
+    // load는 서버 응답을 받은 뒤에만 상태를 바꿈 (바로 다시 그리지 않음)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
     return () => {
-      S.current.alive = false;
+      cur.alive = false;
+      // 다음에 열 때 바로 보이도록 마지막 모습을 기억 (보내는 중인 메시지는 빼고)
+      if (cur.info && cur.info.joined) cacheSet(L.chatMsgs(id)[0], { messages: cur.msgs.filter((m) => m.id > 0), reads: cur.reads, since: cur.since, has_more: hasMoreRef.current });
     };
   }, [id]);
   // 초대 · 채널 수정 뒤 (refresh) 머리글 · 참여자 정보 새로
@@ -424,7 +467,7 @@ export function ChatScreen({ id }: { id: number }) {
 
   // 새 메시지 · 읽음 확인 (3초마다, 앱이 보일 때만)
   useEffect(() => {
-    if (!info || !info.joined) return;
+    if (!real || !real.joined) return;
     let t: any;
     const tick = async () => {
       if (!S.current.alive) return;
@@ -452,7 +495,7 @@ export function ChatScreen({ id }: { id: number }) {
     };
     t = setTimeout(tick, 3000);
     return () => clearTimeout(t);
-  }, [info && info.joined, id]);
+  }, [real && real.joined, id]);
 
   const sendMsg = async (body: string, files: number[]) => {
     const cid = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -497,7 +540,7 @@ export function ChatScreen({ id }: { id: number }) {
           <Icon name="clip" size={20} color={c.ink} />
           <T style={{ fontWeight: '600' }}>파일</T>
         </Press>
-      </Divided>
+      </Divided>,
     );
   const pickAndSend = async (images: boolean) => {
     sheet.close();
@@ -534,6 +577,8 @@ export function ChatScreen({ id }: { id: number }) {
     toast('채널에 참여했어요');
     load();
   };
+  // 받기 전에는 대화 목록에서 본 정보(이름 · 사진)로 머리글을 먼저 그림
+  const info = real || chatSeed(id);
   const backTo = info && info.type === 'channel' ? 'cm/chan' : 'dm';
   const leave = () => {
     refresh();
@@ -544,7 +589,7 @@ export function ChatScreen({ id }: { id: number }) {
     return (
       <View style={{ flex: 1, backgroundColor: c.chatBg }}>
         <SubHeader onBack={() => back('dm')} title="대화" />
-        {error ? <ErrorView message={error} onRetry={load} /> : <Loading />}
+        {error ? <ErrorView message={error} onRetry={retry} /> : null}
       </View>
     );
   }
@@ -570,17 +615,29 @@ export function ChatScreen({ id }: { id: number }) {
           <Text style={{ fontSize: 12, color: c.sub, backgroundColor: c.dark ? 'rgba(23,25,29,0.7)' : 'rgba(255,255,255,0.7)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, overflow: 'hidden' }}>
             {d.getFullYear()}년 {md(d)}
           </Text>
-        </View>
+        </View>,
       );
       lastDay = day;
     }
     if (m.sys) {
       rows.push(
         <View key={m.id} style={{ alignItems: 'center', marginVertical: 8 }}>
-          <Text style={{ fontSize: 12, color: c.ink2, backgroundColor: c.dark ? 'rgba(23,25,29,0.7)' : 'rgba(255,255,255,0.7)', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12, overflow: 'hidden', textAlign: 'center', maxWidth: '86%' }}>
+          <Text
+            style={{
+              fontSize: 12,
+              color: c.ink2,
+              backgroundColor: c.dark ? 'rgba(23,25,29,0.7)' : 'rgba(255,255,255,0.7)',
+              paddingHorizontal: 12,
+              paddingVertical: 5,
+              borderRadius: 12,
+              overflow: 'hidden',
+              textAlign: 'center',
+              maxWidth: '86%',
+            }}
+          >
             {m.body}
           </Text>
-        </View>
+        </View>,
       );
       return;
     }
@@ -591,7 +648,9 @@ export function ChatScreen({ id }: { id: number }) {
     const mine = m.uid === me().id;
     const n = unreadOf(m);
     const bubble = m.body ? (
-      <View style={{ backgroundColor: mine ? c.primary : c.bubble, paddingVertical: 9, paddingHorizontal: 13, borderRadius: 18, borderTopLeftRadius: !mine && !cont ? 5 : 18, borderTopRightRadius: mine && !cont ? 5 : 18 }}>
+      <View
+        style={{ backgroundColor: mine ? c.primary : c.bubble, paddingVertical: 9, paddingHorizontal: 13, borderRadius: 18, borderTopLeftRadius: !mine && !cont ? 5 : 18, borderTopRightRadius: mine && !cont ? 5 : 18 }}
+      >
         <LinkText text={m.body} style={{ fontSize: 15, lineHeight: 22, color: mine ? '#fff' : c.ink }} linkColor={mine ? '#fff' : c.primary} />
       </View>
     ) : null;
@@ -604,7 +663,7 @@ export function ChatScreen({ id }: { id: number }) {
         <View key={k} style={{ maxWidth: 240 }}>
           <FileRow f={f} bg={c.bubble} />
         </View>
-      )
+      ),
     );
     const side = (
       <View style={{ alignItems: mine ? 'flex-end' : 'flex-start', gap: 1, paddingBottom: 1 }}>
@@ -625,13 +684,13 @@ export function ChatScreen({ id }: { id: number }) {
       rows.push(
         <View key={m.id} style={{ alignSelf: 'flex-end', maxWidth: '84%', marginTop: cont ? 0 : 8 }}>
           {row}
-        </View>
+        </View>,
       );
     } else if (cont) {
       rows.push(
         <View key={m.id} style={{ maxWidth: '84%', paddingLeft: 46 }}>
           {row}
-        </View>
+        </View>,
       );
     } else {
       const who = mem(m.uid) || { name: m.name, av: m.av };
@@ -646,7 +705,7 @@ export function ChatScreen({ id }: { id: number }) {
             </Press>
             {row}
           </View>
-        </View>
+        </View>,
       );
     }
   });
@@ -655,8 +714,8 @@ export function ChatScreen({ id }: { id: number }) {
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: c.chatBg }}>
       <SubHeader
         onBack={leave}
-        title={<ChatHead info={info} onInfo={() => openChatInfo(info, refreshInfo)} />}
-        right={info.joined ? <IconBtn name="more" label="대화방 정보" onPress={() => openChatInfo(info, refreshInfo)} /> : null}
+        title={<ChatHead info={info} onInfo={() => real && openChatInfo(real, refreshInfo)} />}
+        right={info.joined ? <IconBtn name="more" label="대화방 정보" onPress={() => real && openChatInfo(real, refreshInfo)} /> : null}
       />
       <ScrollView
         ref={scroll}
@@ -676,10 +735,8 @@ export function ChatScreen({ id }: { id: number }) {
           <Empty style={{ marginVertical: 'auto' }}>{`${info.description || ''}\n참여하면 대화를 볼 수 있어요`}</Empty>
         ) : msgs === null ? (
           error ? (
-            <ErrorView message={error} onRetry={load} />
-          ) : (
-            <Loading />
-          )
+            <ErrorView message={error} onRetry={retry} />
+          ) : null
         ) : (
           <>
             {hasMore ? (

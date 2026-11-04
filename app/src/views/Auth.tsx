@@ -4,6 +4,7 @@ import { Image, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, 
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { login, logout, registerUrl } from '../lib/api';
+import { cacheClear } from '../lib/hooks';
 import { getState, loadData, setState, useColors } from '../lib/store';
 import { Btn, Input } from '../ui/kit';
 
@@ -26,6 +27,7 @@ export async function doLogout() {
     /* 서버에 못 닿아도 이 기기에서는 로그아웃 */
   }
   if (router.canDismiss()) router.dismissAll();
+  cacheClear();
   setState({ auth: 'login', data: null, badges: {}, main: { sec: 'home', tab: 'home', id: null } });
 }
 

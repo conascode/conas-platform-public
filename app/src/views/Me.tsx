@@ -2,8 +2,9 @@
 import React, { useState } from 'react';
 import { Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { api, avatarPost, post } from '../lib/api';
+import { avatarPost, post } from '../lib/api';
 import { useLoad } from '../lib/hooks';
+import { L } from '../lib/loaders';
 import { loadData, me, mem, refresh, setTheme, useColors, useStore } from '../lib/store';
 import { md, roleLabel, won } from '../lib/util';
 import { Icon } from '../ui/Icon';
@@ -104,7 +105,7 @@ export function MeView() {
   const c = useColors();
   const m = useStore((s) => s.data.me);
   const theme = useStore((s) => s.theme);
-  const q = useLoad(() => api('pay'), []);
+  const q = useLoad(...L.pay());
   const menu = (icon: string, t: string, title: string, onPress: () => any, opt: { danger?: boolean; right?: React.ReactNode; chev?: boolean } = {}) => (
     <Press onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14 }}>
       <DocIc icon={icon} t={t} />

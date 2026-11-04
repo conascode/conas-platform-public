@@ -2,7 +2,8 @@
 import React, { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { api, post } from '../lib/api';
-import { useLoad } from '../lib/hooks';
+import { useActive, useLoad } from '../lib/hooks';
+import { L } from '../lib/loaders';
 import { go, refresh, setBadges, useColors } from '../lib/store';
 import { ago } from '../lib/util';
 import { Icon } from '../ui/Icon';
@@ -12,36 +13,48 @@ import { Page } from '../ui/Page';
 
 const N = { cat: '전체', data: null as any, current: null as any, set: null as null | ((d: any) => void) };
 
-export function NoticeView({ id }: { id: number | null }) {
+export function NoticeView({ id, nonce }: { id: number | null; nonce?: number }) {
   const c = useColors();
+  const active = useActive();
   const [cat, setCat] = useState(N.cat);
-  const q = useLoad(async () => {
-    const d = await api('notices');
+  const [key, load] = L.notices();
+  const q = useLoad(key, async () => {
+    const d = await load();
     setBadges(d.badges);
-    N.data = d;
     return d;
-  }, []);
-  N.set = q.setData;
+  });
+  const setData = q.setData;
   useEffect(() => {
-    if (id && q.data) openNotice(id);
-  }, [id, !!q.data]);
+    if (q.data) N.data = q.data;
+    N.set = setData;
+  });
+  // 공지 링크(ws/notice/3)로 들어오면 그 공지를 바로 열기 (같은 링크를 다시 눌러도)
+  useEffect(() => {
+    if (id && active) openNotice(id);
+  }, [id, nonce, active]);
+  // 제목 · 분류 버튼은 데이터를 다시 받아도 그대로
+  const d0: any = q.data;
+  const cats = ['전체', '필독', ...((d0 && d0.categories) || [])];
+  const pending = d0 ? d0.notices.filter((n: any) => n.need_confirm).length : 0;
+  const header = (
+    <>
+      <PageH title="공지" sub={!d0 ? ' ' : pending ? <Text style={{ fontSize: 13, color: c.warn, fontWeight: '600', marginTop: 2 }}>확인이 필요한 필독 공지 {pending}건</Text> : '모든 필독 공지를 확인했어요'} />
+      <Chips
+        items={cats.map((x) => ({ v: x, label: x }))}
+        value={cat}
+        onChange={(v) => {
+          N.cat = v;
+          setCat(v);
+        }}
+      />
+    </>
+  );
   return (
-    <Page q={q} fab={q.data && q.data.can_write ? <Fab icon="pen" title="공지 쓰기" onPress={() => openNoticeEdit(null)} /> : null}>
+    <Page q={q} header={header} fab={q.data && q.data.can_write ? <Fab icon="pen" title="공지 쓰기" onPress={() => openNoticeEdit(null)} /> : null}>
       {(d: any) => {
-        const cats = ['전체', '필독', ...d.categories];
         const list = d.notices.filter((n: any) => cat === '전체' || (cat === '필독' ? n.must : n.category === cat));
-        const pending = d.notices.filter((n: any) => n.need_confirm).length;
         return (
           <>
-            <PageH title="공지" sub={pending ? <Text style={{ fontSize: 13, color: c.warn, fontWeight: '600', marginTop: 2 }}>확인이 필요한 필독 공지 {pending}건</Text> : '모든 필독 공지를 확인했어요'} />
-            <Chips
-              items={cats.map((x) => ({ v: x, label: x }))}
-              value={cat}
-              onChange={(v) => {
-                N.cat = v;
-                setCat(v);
-              }}
-            />
             <Card>
               {list.length ? (
                 <Divided>
@@ -50,7 +63,11 @@ export function NoticeView({ id }: { id: number | null }) {
                       <Row gap={6}>
                         {n.must ? <Tag kind="danger">필독</Tag> : null}
                         <Tag kind="primary">{n.category}</Tag>
-                        {n.need_confirm ? <St kind="late" style={{ height: 20 }}>확인 필요</St> : null}
+                        {n.need_confirm ? (
+                          <St kind="late" style={{ height: 20 }}>
+                            확인 필요
+                          </St>
+                        ) : null}
                       </Row>
                       <Row gap={7} style={{ marginTop: 6, marginBottom: 4 }}>
                         {!n.read ? <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: c.danger }} /> : null}

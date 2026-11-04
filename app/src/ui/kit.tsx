@@ -78,13 +78,14 @@ export function LinkText({ text, style, linkColor }: { text: string; style?: Sty
 /** 누르면 살짝 흐려지는 영역. onPress가 Promise를 돌려주면 끝날 때까지 다시 못 누름 */
 export function Press({
   onPress,
+  onPressIn,
   style,
   children,
   disabled,
   label,
   hit,
   pressedStyle,
-}: Kids & { onPress?: () => any; style?: StyleProp<ViewStyle>; disabled?: boolean; label?: string; hit?: number; pressedStyle?: ViewStyle }) {
+}: Kids & { onPress?: () => any; onPressIn?: () => any; style?: StyleProp<ViewStyle>; disabled?: boolean; label?: string; hit?: number; pressedStyle?: ViewStyle }) {
   const [busy, setBusy] = useState(false);
   const run = async () => {
     if (!onPress || busy) return;
@@ -103,6 +104,7 @@ export function Press({
   return (
     <Pressable
       onPress={run}
+      onPressIn={onPressIn}
       disabled={disabled || busy || !onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
@@ -244,11 +246,11 @@ export function Divided({ children, style, gap = 0 }: Kids & { style?: StyleProp
     </View>
   );
 }
-export function ListItem({ children, onPress, style, label }: Kids & { onPress?: () => any; style?: StyleProp<ViewStyle>; label?: string }) {
+export function ListItem({ children, onPress, onPressIn, style, label }: Kids & { onPress?: () => any; onPressIn?: () => any; style?: StyleProp<ViewStyle>; label?: string }) {
   const inner = [s.listItem, style];
   if (!onPress) return <View style={inner}>{children}</View>;
   return (
-    <Press onPress={onPress} style={inner} label={label}>
+    <Press onPress={onPress} onPressIn={onPressIn} style={inner} label={label}>
       {children}
     </Press>
   );

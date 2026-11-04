@@ -11,7 +11,8 @@ import { api } from './api';
 import { DARK, LIGHT, Colors } from './theme';
 
 export type Sec = 'home' | 'ws' | 'cm' | 'dm' | 'all';
-export type MainRoute = { sec: Sec; tab: string; id: number | null };
+/** nonce: 이동할 때마다 늘어남 (같은 공지 링크를 다시 눌러도 열리도록) */
+export type MainRoute = { sec: Sec; tab: string; id: number | null; nonce?: number };
 export type Auth = 'loading' | 'login' | 'pending' | 'ready' | 'error';
 
 type State = {
@@ -108,11 +109,13 @@ export const setCloseOverlays = (f: () => void) => {
   closeOverlays = f;
 };
 
+let nonce = 0;
 function showMain(m: MainRoute) {
   if (router.canDismiss()) router.dismissAll();
   const same = state.main.sec === m.sec && state.main.tab === m.tab && state.main.id === m.id;
-  if (same) refresh();
-  else setState({ main: m });
+  // 같은 화면을 다시 누르면 새로 받기만 (id가 있으면 nonce로 다시 열기)
+  if (same && !m.id) refresh();
+  else setState({ main: { ...m, nonce: ++nonce } });
 }
 
 export function go(path: string) {
