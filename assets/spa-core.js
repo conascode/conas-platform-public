@@ -279,19 +279,24 @@
     get open() {
       return !!sheetEl;
     },
-    /** 이미 열려 있으면 내용만 바꿈 */
+    /**
+     * 이미 열려 있으면 내용만 바꿈
+     * opt.onClose: 닫힐 때 실행 / opt.cls: 시트에 붙일 class / opt.swipe: 아래로 끌어내려 닫기
+     */
     show(title, html, opt = {}) {
       if (!sheetEl) {
         sheetEl = document.createElement('div');
-        sheetEl.className = 'sheet-wrap';
         sheetEl.innerHTML =
           '<div class="backdrop" data-sheet-close></div><div class="sheet" role="dialog" aria-modal="true">' +
+          '<div class="sheet-grab" aria-hidden="true"></div>' +
           `<div class="sheet-head"><b></b><button class="icon-btn" data-sheet-close aria-label="닫기">${A.ic('x')}</button></div>` +
           '<div class="sheet-body"></div></div>';
         $('#app').appendChild(sheetEl);
+        sheetSwipe(sheetEl);
         history.pushState({ ...(history.state || {}), sheet: true }, '');
         sheetPushed = true;
       }
+      sheetEl.className = 'sheet-wrap' + (opt.swipe ? ' swipe' : '') + (opt.cls ? ' ' + opt.cls : '');
       sheetOnClose = opt.onClose || null;
       $('.sheet-head b', sheetEl).textContent = title || '';
       const body = $('.sheet-body', sheetEl);
@@ -322,6 +327,77 @@
   document.addEventListener('click', (e) => {
     if (e.target.closest('[data-sheet-close]')) A.sheet.close();
   });
+
+  /**
+   * 시트 끌어내려 닫기 (opt.swipe 일 때만)
+   *  내용이 맨 위까지 올라가 있을 때 아래로 끌면 따라 내려오고,
+   *  1/4 넘게 내리거나 빠르게 튕기면 닫힘. 덜 내리면 제자리로
+   */
+  function sheetSwipe(wrap) {
+    const sheet = $('.sheet', wrap);
+    const back = $('.backdrop', wrap);
+    let y0 = null;
+    let dy = 0;
+    let t0 = 0;
+    let dragging = false;
+    let blockClick = false;
+    const begin = (y, target) => {
+      if (!wrap.classList.contains('swipe') || wrap.classList.contains('closing')) return;
+      if (target.closest('input, textarea, select')) return;
+      const body = $('.sheet-body', wrap);
+      if (body.scrollTop > 0 && !target.closest('.sheet-grab, .sheet-head')) return;
+      y0 = y;
+      dy = 0;
+      t0 = Date.now();
+      dragging = false;
+    };
+    const move = (y, e) => {
+      if (y0 === null) return;
+      dy = Math.max(0, y - y0);
+      if (!dragging) {
+        if (y - y0 < -6) return (y0 = null); // 위로 밀면 그냥 스크롤
+        if (dy < 8) return;
+        dragging = true;
+        sheet.style.animation = 'none';
+        sheet.style.transition = 'none';
+      }
+      if (e.cancelable) e.preventDefault();
+      sheet.style.transform = `translateY(${dy}px)`;
+      back.style.opacity = String(Math.max(0, 1 - dy / sheet.offsetHeight));
+    };
+    const end = () => {
+      if (y0 === null) return;
+      y0 = null;
+      if (!dragging) return;
+      dragging = false;
+      blockClick = true;
+      setTimeout(() => (blockClick = false), 50);
+      const fast = dy / Math.max(1, Date.now() - t0) > 0.6;
+      sheet.style.animation = '';
+      if (dy > sheet.offsetHeight / 4 || (fast && dy > 30)) {
+        back.style.opacity = '';
+        A.sheet.close(); // 지금 위치에서 그대로 내려가며 닫힘
+      } else {
+        sheet.style.transition = 'transform .25s cubic-bezier(.2,.7,.2,1)';
+        sheet.style.transform = '';
+        back.style.opacity = '';
+      }
+    };
+    sheet.addEventListener('touchstart', (e) => begin(e.touches[0].clientY, e.target), { passive: true });
+    sheet.addEventListener('touchmove', (e) => move(e.touches[0].clientY, e), { passive: false });
+    sheet.addEventListener('touchend', end);
+    sheet.addEventListener('touchcancel', end);
+    // 컴퓨터: 마우스로 끌기
+    const mm = (e) => move(e.clientY, e);
+    sheet.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      begin(e.clientY, e.target);
+      window.addEventListener('mousemove', mm);
+      window.addEventListener('mouseup', () => (window.removeEventListener('mousemove', mm), end()), { once: true });
+    });
+    // 끌기를 마친 순간의 클릭(버튼 눌림)은 무시
+    sheet.addEventListener('click', (e) => blockClick && (e.stopPropagation(), e.preventDefault()), true);
+  }
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (A.viewer && A.viewer.open) A.viewer.close();
@@ -548,7 +624,6 @@
     if (a === 'all') return { ...r, sec: 'all', tab: 'all', view: 'all' };
     if (a === 'admin') return { ...r, sec: 'all', tab: 'all', view: 'admin', sub: b || 'members' };
     if (a === 'dm') return { ...r, sec: 'dm', tab: 'dm', view: 'dm' };
-    if (a === 'idcard') return { ...r, sec: 'all', tab: 'all', view: 'idcard', full: true };
     if (a === 'chat') {
       const fromCm = query.get('from') === 'cm' || (A.cache.convType && A.cache.convType[b] === 'channel');
       return { ...r, sec: fromCm ? 'cm' : 'dm', tab: fromCm ? 'chan' : 'dm', view: 'chat', id: Number(b), full: true };

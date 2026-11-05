@@ -11,7 +11,7 @@
 --   - users 테이블은 conas.kr 메인 사이트와 같이 써요. 운영 서버에는 이미 있어요.
 --
 -- 실행 예)  mysql -u root -p conas_dev < db/schema.sql
--- 구조를 바꾸면 이 파일도 같이 고쳐 주세요.
+-- 구조를 바꾸면 이 파일도 같이 고치고, 운영 DB에 실행할 변경 SQL은 db/migrations/ 에 날짜순으로 넣어 주세요.
 -- =====================================================================
 
 SET NAMES utf8mb4;
@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS `in_teams` (
 CREATE TABLE IF NOT EXISTS `in_members` (
   `user_id` int NOT NULL,
   `display_name` varchar(50) DEFAULT NULL,
+  `employee_no` varchar(20) DEFAULT NULL COMMENT '사원번호 (관리자가 입력, 겹치면 안 됨)',
   `avatar` varchar(64) DEFAULT NULL COMMENT '예: 12_0123456789ab.jpg (UPLOAD_DIR/avatars 안의 파일 이름)',
   `phone` varchar(20) DEFAULT NULL,
   `team_id` int DEFAULT NULL,
@@ -68,6 +69,7 @@ CREATE TABLE IF NOT EXISTS `in_members` (
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`user_id`),
+  UNIQUE KEY `uniq_employee_no` (`employee_no`),
   KEY `idx_status` (`status`),
   KEY `idx_team` (`team_id`),
   CONSTRAINT `fk_in_members_team` FOREIGN KEY (`team_id`) REFERENCES `in_teams` (`id`) ON DELETE SET NULL,

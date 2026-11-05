@@ -417,7 +417,7 @@ main.chat { background: var(--chat-bg); }
 /* 모바일 사원증 (#/idcard) */
 .idv > :first-child { margin-top: auto; }
 .idv > :last-child { margin-bottom: auto; }
-.idv { flex: 1; overflow-y: auto; display: flex; flex-direction: column; align-items: center; padding: max(20px, env(safe-area-inset-top)) 18px max(20px, env(safe-area-inset-bottom)); background: var(--surface-2); }
+.idv { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 4px 18px calc(16px + env(safe-area-inset-bottom)); }
 .idv-card { width: 100%; max-width: 400px; background: var(--surface); border-radius: 26px; overflow: hidden; box-shadow: 0 10px 30px rgba(25,31,40,.08); text-align: center; padding-bottom: 26px; }
 .idv-head { height: 58px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 21px; font-weight: 800; letter-spacing: .04em; background: linear-gradient(90deg, var(--primary), #1098ad); }
 .idv-brand { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 28px 0 22px; font-size: 30px; font-weight: 900; letter-spacing: -.01em; color: var(--primary); }
@@ -428,13 +428,12 @@ main.chat { background: var(--chat-bg); }
 .idv-name { display: block; margin-top: 22px; font-size: 30px; font-weight: 900; letter-spacing: .02em; color: var(--primary); }
 .idv-dept { margin-top: 8px; font-size: 17px; color: var(--ink-2); }
 .idv-no { margin-top: 4px; font-size: 17px; color: var(--ink-2); letter-spacing: .04em; font-variant-numeric: tabular-nums; }
-.idv-ok { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 30px 24px 0; text-align: left; font-size: 16px; color: var(--ink-2); line-height: 1.55; }
+.idv-ok { margin: 28px 24px 0; font-size: 16px; color: var(--ink-2); line-height: 1.6; }
+.idv-none { color: var(--faint); font-size: 15px; letter-spacing: 0; }
 .idv-date { font-variant-numeric: tabular-nums; }
-.idv-seal { width: 58px; height: 58px; flex: none; color: #d9363e; transform: rotate(-3deg); opacity: .9; }
-.idv-seal text { fill: currentColor; font-size: 17px; font-weight: 900; font-family: "Nanum Myeongjo", "Batang", serif; }
 .idv-back { display: inline-flex; align-items: center; gap: 10px; margin-top: 28px; height: 52px; padding: 0 34px; border-radius: 26px; background: var(--primary-soft); color: var(--primary); font-size: 17px; font-weight: 800; }
 .idv-clock { margin-top: 22px; font-size: 20px; font-weight: 700; color: var(--primary); font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
-.idv-marquee { width: calc(100% + 36px); margin-top: 10px; overflow: hidden; background: var(--primary-soft); color: var(--primary); font-size: 15px; font-weight: 600; }
+.idv-marquee { width: calc(100% + 36px); flex: none; margin-top: 10px; overflow: hidden; background: var(--primary-soft); color: var(--primary); font-size: 15px; font-weight: 600; }
 .idv-marquee > div { display: flex; width: max-content; animation: idvRoll 18s linear infinite; }
 .idv-marquee span { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; white-space: nowrap; }
 .idv-mk { font-weight: 900; }
@@ -717,6 +716,15 @@ main.chat { animation: chatIn .32s cubic-bezier(.2,.7,.2,1); }
 .sheet-body { overflow-y: auto; padding: 8px 20px calc(24px + env(safe-area-inset-bottom)); overscroll-behavior: contain; }
 .sheet-body .composer { margin: 12px -20px calc(-24px - env(safe-area-inset-bottom)); }
 @keyframes up { from { transform: translateY(100%); } to { transform: none; } }
+/* 끌어내려 닫는 시트: 위쪽 손잡이 */
+.sheet-grab { display: none; }
+.sheet-wrap.swipe .sheet-grab { display: block; flex: none; width: 40px; height: 5px; border-radius: 3px; background: var(--line-2); margin: 8px auto 2px; }
+.sheet-wrap.swipe .sheet { touch-action: pan-y; }
+/* 모바일 사원증: 화면 끝까지 올라오는 시트 */
+.sheet-wrap.sheet-idcard .sheet { height: calc(100% - 10px); max-height: none; background: var(--surface-2); overflow: hidden; animation-duration: .38s; }
+.sheet-wrap.sheet-idcard .sheet-head { display: none; }
+.sheet-wrap.swipe .sheet-grab, .sheet-wrap.sheet-idcard .idv { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.sheet-wrap.sheet-idcard .sheet-body { flex: 1; display: flex; flex-direction: column; padding: 0; overflow-x: hidden; }
 @keyframes down { to { transform: translateY(100%); } }
 @keyframes fade { from { opacity: 0; } }
 .toast {
