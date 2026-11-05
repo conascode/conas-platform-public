@@ -74,6 +74,9 @@ $routes = [
     'notice.confirm' => ['POST', 'notice'],
     'notice.save'    => ['POST', 'notice'],
     'notice.delete'  => ['POST', 'notice'],
+    // 구내식당
+    'meals'          => ['GET',  'meal'],
+    'meal.save'      => ['POST', 'meal'],
     // 근태 (QR은 데모)
     'att'            => ['GET',  'att'],
     'att.check'      => ['POST', 'att'],

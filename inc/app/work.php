@@ -221,6 +221,7 @@ function api_home(array $me, array $in): array
 
     require_once __DIR__ . '/notice.php';
     $notices = array_slice(notice_list($me), 0, 3);
+    require_once __DIR__ . '/meal.php';
 
     return [
         'att' => $att ? ['in' => $att['check_in'] ? substr($att['check_in'], 0, 5) : null, 'out' => $att['check_out'] ? substr($att['check_out'], 0, 5) : null, 'kind' => $att['kind']] : null,
@@ -231,6 +232,7 @@ function api_home(array $me, array $in): array
         'open_tasks' => count($tasks),
         'first_task' => $tasks ? $tasks[0]['title'] : null,
         'notices' => $notices,
+        'meal' => meal_for_home(),
         'badges' => badges($me),
     ];
 }

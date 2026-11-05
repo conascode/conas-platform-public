@@ -45,13 +45,14 @@
 
   /** opt.noProject: 프로젝트 화면 안에서는 프로젝트 이름 대신 단계만 */
   function taskRow(t, opt = {}) {
-    const sub = !t.mine ? `${esc(t.assignee)} 담당` : t.assigner_id === me().id ? '직접 등록' : `${esc(t.assigner || '')} 배정`;
+    // 목록(업무 탭 · 프로젝트)에는 담당자만. 누가 배정했는지는 업무 상세에서만 보여줌
+    const sub = !t.mine ? `${esc(t.assignee)} 담당` : '';
     const tag = opt.noProject ? '' : `<span class="tag">${esc(t.project_short || t.project || '개인')}${t.stage && !opt.noStage ? ' · ' + esc(t.stage) : ''}</span>`;
     return `<div class="task ${t.status === 'done' ? 'done' : ''}">
       <button class="tchk ${t.status === 'done' ? 'on' : t.status === 'review' ? 'rv' : ''}" data-act="task" data-id="${t.id}" aria-label="업무 상세">${t.status === 'review' ? ic('clock', 14, 2.6) : ic('check', 14, 3)}</button>
       <button class="task-main" data-act="task" data-id="${t.id}">
         <span class="t15 ellipsis block">${esc(t.title)}</span>
-        <span class="task-meta">${tag}${t.reject_note && t.status === 'todo' ? '<span class="tag danger">반려됨</span>' : ''}<span class="who">${sub}</span></span>
+        <span class="task-meta">${tag}${t.reject_note && t.status === 'todo' ? '<span class="tag danger">반려됨</span>' : ''}${sub ? `<span class="who">${sub}</span>` : ''}</span>
       </button>
       ${stateChip(t)}
     </div>`;
@@ -355,6 +356,7 @@
 
   A.acts['task-new'] = (el) => {
     const projs = projectChoices();
+    // 프로젝트 화면에서 열면 그 프로젝트 · 단계가 골라져 있고, 마감일은 오늘
     const pid = el && el.dataset && el.dataset.project ? Number(el.dataset.project) : null;
     const sid = el && el.dataset ? el.dataset.stage || '' : '';
     const people = me().assignable.map(A.mem).filter(Boolean);
@@ -370,7 +372,7 @@
         </div>
         <p class="hint" id="taskHint" data-rv="${rv ? esc(rv.name + ' ' + A.ROLE[rv.role]) : ''}"></p>
         <div class="field"><label>업무명</label><input name="title" required maxlength="200" placeholder="예: 로그인 화면 개발"></div>
-        <div class="field"><label>마감일</label><input type="date" name="due" value="${A.iso(A.addDays(A.today(), 3))}" required></div>
+        <div class="field"><label>마감일</label><input type="date" name="due" value="${A.iso(pid ? A.today() : A.addDays(A.today(), 3))}" required></div>
         <div class="field"><label>설명 (선택)</label><textarea name="description" placeholder="무엇을, 어디까지 하면 되는지 적어주세요"></textarea></div>
         <button class="btn" type="submit" id="taskBtn">추가하기</button>
       </form>`

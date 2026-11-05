@@ -19,6 +19,7 @@
         ['서류·결재', 'file', 'c-ok', 'ws/doc', b.approval],
         ['공지', 'megaphone', 'c-warn', 'ws/notice', b.notice],
         ['내 정보', 'user', 'c-leave', 'ws/me'],
+        ['구내식당', 'meal', 'c-ok', 'act:meal'],
       ])}
       ${g('커뮤니티', [
         ['게시판', 'board', 'c-warn', 'cm/board'],

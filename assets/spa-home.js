@@ -27,6 +27,114 @@
       <div class="qr-txt"><b>${title}</b><span>${sub}</span></div>${a && a.out ? '' : ic('chevR', 22, 2.2)}</button>`;
   }
 
+  // ---------- 구내식당 ----------
+  /** '오늘 점심' · '내일 점심' · '월요일 점심' */
+  function mealLabel(date) {
+    const t = A.iso(A.today());
+    if (date === t) return '오늘 점심';
+    if (date === A.iso(A.addDays(A.today(), 1))) return '내일 점심';
+    return `${A.DOW[A.date(date).getDay()]}요일 점심`;
+  }
+  function mealCard() {
+    const m = home.meal;
+    if (!m) return '';
+    return `<button class="card today-task" data-act="meal" data-date="${m.date}">
+        <span class="doc-ic c-ok">${ic('meal', 20, 2)}</span>
+        <span class="grow"><b class="t15 block">${mealLabel(m.date)}</b>
+          <span class="t13 muted ellipsis block">${m.items.length ? esc(m.items.join(', ')) : '아직 메뉴가 올라오지 않았어요'}</span></span>
+        ${ic('chevR', 18)}
+      </button>`;
+  }
+
+  // 한 주 식단표 (아래에서 올라오는 창). 대표 · 관리자는 입력 버튼
+  const ML = { week: null, data: null };
+  A.acts.meal = async (el) => {
+    ML.week = (el && el.dataset && el.dataset.date) || A.iso(A.today());
+    ML.focus = ML.week;
+    A.sheet.show('구내식당', '<div class="loading"><div class="spinner"></div></div>');
+    await loadMeals();
+  };
+  async function loadMeals() {
+    try {
+      ML.data = await A.api('meals', { week: ML.week });
+    } catch (e) {
+      if (A.sheet.open) A.sheet.close();
+      return A.err(e);
+    }
+    if (A.sheet.open) drawMeals();
+  }
+  function drawMeals() {
+    const d = ML.data;
+    const mon = A.date(d.week_start);
+    const sun = A.addDays(mon, 6);
+    const thisWeek = d.week_start === weekStartOf(d.today);
+    // 평일은 항상, 주말은 메뉴가 있을 때만
+    const days = d.days.filter((x, i) => i < 5 || x.items.length);
+    const rows = days
+      .map((x) => {
+        const dt = A.date(x.date);
+        const isToday = x.date === d.today;
+        return `<div class="meal-day ${isToday ? 'today' : ''} ${x.date === ML.focus ? 'focus' : ''}">
+          <div class="meal-date"><b>${A.DOW[dt.getDay()]}</b><span>${dt.getMonth() + 1}/${dt.getDate()}</span>${isToday ? '<em>오늘</em>' : ''}</div>
+          <div class="meal-items">${x.items.length ? x.items.map((it, i) => `<span class="${i === 0 ? 'main' : ''}">${esc(it)}</span>`).join('') : '<span class="none">메뉴 없음</span>'}</div>
+        </div>`;
+      })
+      .join('');
+    A.sheet.show(
+      '구내식당',
+      `<div class="meal-nav">
+        <button class="icon-btn" data-act="meal-week" data-d="-7" aria-label="지난주">${ic('chevL', 20, 2.2)}</button>
+        <b>${mon.getMonth() + 1}월 ${mon.getDate()}일 ~ ${sun.getMonth() + 1}월 ${sun.getDate()}일${thisWeek ? ' · 이번 주' : ''}</b>
+        <button class="icon-btn" data-act="meal-week" data-d="7" aria-label="다음 주">${ic('chevR', 20, 2.2)}</button>
+      </div>
+      <div class="meal-list">${rows}</div>
+      ${d.can_edit ? `<button class="btn ghost" data-act="meal-edit" style="margin-top:14px">${ic('pen', 18)}이 주 메뉴 입력</button>` : ''}`
+    );
+  }
+  function weekStartOf(iso) {
+    const x = A.date(iso);
+    return A.iso(A.addDays(x, -((x.getDay() + 6) % 7)));
+  }
+  A.acts['meal-week'] = async (el) => {
+    ML.week = A.iso(A.addDays(A.date(ML.data.week_start), Number(el.dataset.d)));
+    ML.focus = null;
+    await loadMeals();
+  };
+  A.acts['meal-edit'] = () => {
+    const d = ML.data;
+    const fields = d.days
+      .map((x, i) => {
+        const dt = A.date(x.date);
+        const weekend = i >= 5;
+        return `<div class="field ${weekend ? 'meal-weekend' : ''}"><label>${A.DOW[dt.getDay()]}요일 <span class="t13 muted">${dt.getMonth() + 1}/${dt.getDate()}${weekend ? ' · 주말 (있을 때만)' : ''}</span></label>
+          <textarea name="d${i}" rows="${weekend ? 2 : 4}" placeholder="${i === 0 ? '한 줄에 하나씩\n예) 김치찌개\n계란말이\n깍두기' : ''}">${esc(x.items.join('\n'))}</textarea></div>`;
+      })
+      .join('');
+    A.sheet.show(
+      '메뉴 입력',
+      `<form data-form="meal-save">
+        <p class="hint" style="margin-top:0">메뉴는 한 줄에 하나씩 적어 주세요. 첫 줄이 대표 메뉴로 크게 보여요. 비워 두면 그날은 '메뉴 없음'이에요.</p>
+        ${fields}
+        <button class="btn" type="submit">저장</button>
+      </form>`
+    );
+  };
+  A.forms['meal-save'] = async (f) => {
+    const days = ML.data.days.map((x, i) => ({ date: x.date, items: f.elements['d' + i].value }));
+    ML.data = await A.post('meal.save', { days });
+    A.toast('메뉴를 저장했어요');
+    drawMeals();
+    // 홈 화면이면 뒤쪽 카드만 새로 (A.refresh 는 열린 창을 닫으므로 쓰지 않음)
+    if (A.isCurrent('home')) {
+      try {
+        home = await A.api('home');
+        if (A.isCurrent('home')) draw(A.$('#view'));
+      } catch (e) {
+        /* 다음에 홈을 열 때 갱신 */
+      }
+    }
+  };
+
   function draw(main) {
     const start = A.date(home.week_start);
     const days = [...Array(7)].map((_, i) => A.addDays(start, i));
@@ -50,6 +158,7 @@
           }</span></span>
         ${ic('chevR', 18)}
       </button>
+      ${mealCard()}
 
       <section class="card">
         <div class="card-h"><h3>공지</h3><button class="more" data-go="ws/notice">전체 ${ic('chevR', 14, 2)}</button></div>

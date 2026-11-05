@@ -237,6 +237,21 @@ main.chat { background: var(--chat-bg); }
 .qr-txt b { display: block; font-size: 18px; font-weight: 800; }
 .qr-txt span { font-size: 13px; opacity: .85; }
 .today-task { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; }
+/* 구내식당 */
+.meal-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: -2px -6px 8px; }
+.meal-nav b { font-size: 15px; font-weight: 700; text-align: center; }
+.meal-list { display: flex; flex-direction: column; gap: 8px; }
+.meal-day { display: flex; gap: 14px; padding: 14px; border-radius: 16px; background: var(--surface-2); }
+.meal-day.today { background: var(--ok-soft); box-shadow: inset 0 0 0 1.5px var(--ok); }
+.meal-day.focus:not(.today) { box-shadow: inset 0 0 0 1.5px var(--line-2); }
+.meal-date { display: flex; flex-direction: column; align-items: center; width: 40px; flex: none; }
+.meal-date b { font-size: 17px; font-weight: 800; }
+.meal-date span { font-size: 12px; color: var(--sub); margin-top: 1px; font-variant-numeric: tabular-nums; }
+.meal-date em { font-style: normal; font-size: 11px; font-weight: 800; color: #fff; background: var(--ok); border-radius: 8px; padding: 1px 6px; margin-top: 5px; }
+.meal-items { display: flex; flex-wrap: wrap; align-content: center; gap: 4px 10px; min-width: 0; font-size: 14px; color: var(--ink-2); line-height: 1.5; }
+.meal-items .main { flex-basis: 100%; font-size: 16px; font-weight: 800; color: var(--ink); }
+.meal-items .none { color: var(--faint); }
+.meal-weekend label { color: var(--sub); }
 .week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 14px; }
 .week button { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0; border-radius: 12px; font-size: 12px; color: var(--sub); position: relative; }
 .week button b { font-size: 16px; color: var(--ink); font-weight: 700; }

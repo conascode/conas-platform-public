@@ -537,6 +537,20 @@ CREATE TABLE IF NOT EXISTS `in_attachments` (
   CONSTRAINT `fk_in_att_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- =====================================================================
+-- 구내식당 메뉴 (대표 · 관리자가 입력, 날짜 · 끼니마다 1줄)
+-- =====================================================================
+CREATE TABLE IF NOT EXISTS `in_meals` (
+  `meal_date` date NOT NULL,
+  `meal` varchar(10) NOT NULL DEFAULT 'lunch' COMMENT '지금은 lunch(점심)만 씀',
+  `items` text NOT NULL COMMENT '메뉴, 한 줄에 하나',
+  `updated_by` int DEFAULT NULL,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`meal_date`,`meal`),
+  KEY `fk_in_meals_user` (`updated_by`),
+  CONSTRAINT `fk_in_meals_user` FOREIGN KEY (`updated_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- =====================================================================
