@@ -12,7 +12,7 @@
     const g = (title, items) => `<section class="card"><div class="card-h"><h3>${title}</h3></div><div class="all-grid">
       ${items.map(([n, i, c, to, cnt]) => `<button ${to.startsWith('act:') ? `data-act="${to.slice(4)}"` : `data-go="${to}"`}><span class="ai ${c}">${ic(i)}${cnt ? `<span class="count">${cnt > 99 ? '99+' : cnt}</span>` : ''}</span>${n}</button>`).join('')}</div></section>`;
     main.innerHTML = `
-      <section class="card"><button class="profile" data-act="id-card">${A.avatar(me())}<div class="grow"><b>${esc(me().name)}</b><p>${esc(A.roleLabel(me()))}${me().is_admin ? ' · 관리자' : ''}</p></div><span class="idc-open">${ic('card', 16, 2)}사원증</span></button></section>
+      <section class="card"><button class="profile" data-go="idcard">${A.avatar(me())}<div class="grow"><b>${esc(me().name)}</b><p>${esc(A.roleLabel(me()))}${me().is_admin ? ' · 관리자' : ''}</p></div><span class="idc-open">${ic('card', 16, 2)}사원증</span></button></section>
       ${g('워크스페이스', [
         ['업무', 'checkSq', 'c-primary', 'ws/task', b.task],
         ['근태', 'calendar', 'c-cyan', 'ws/att'],
@@ -33,41 +33,55 @@
       ])}`;
   };
   // ==================================================================
-  // 모바일 사원증 (전체 > 맨 위 프로필)
-  //  아래쪽 시계가 1초마다 움직여서 캡처한 화면이 아니라는 걸 보여줌
+  // 모바일 사원증 (#/idcard, 전체 > 맨 위 프로필)
+  //  아래 시계가 1초마다 움직이고 안내 문구가 흘러가서 캡처한 화면이 아니라는 걸 보여줌
   // ==================================================================
-  A.acts['id-card'] = () => {
+  /** 직인 글자: 도장처럼 오른쪽 줄 위→아래, 다음 왼쪽 줄 (코나 / 스인). 회사 도장 문구로 바꾸려면 여기만 고치면 돼요 */
+  const SEAL = ['코', '나', '스', '인'];
+  const sealSvg = () => `<svg class="idv-seal" viewBox="0 0 64 64" aria-hidden="true">
+      <rect x="3" y="3" width="58" height="58" rx="4" fill="none" stroke="currentColor" stroke-width="3.5"/>
+      <rect x="8" y="8" width="48" height="48" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/>
+      ${SEAL.map((t, i) => `<text x="${i < 2 ? 42 : 22}" y="${i % 2 ? 51 : 29}" text-anchor="middle">${esc(t)}</text>`).join('')}
+    </svg>`;
+
+  A.views.idcard = async (main) => {
     const m = me();
-    const dot = (d) => (d ? d.replaceAll('-', '.') : '');
-    const role = m.role === 'ceo' ? '대표이사' : [m.position, m.role === 'lead' ? '팀장' : ''].filter(Boolean).join(' · ') || '팀원';
-    const rows = [
-      ['소속', m.role === 'ceo' ? 'CONAS' : m.team || '소속 없음'],
-      ['직급 · 직책', role],
-      ['입사일', dot(m.joined_on)],
-      ['이메일', m.email],
-    ].filter(([, v]) => v);
-    let timer = null;
-    A.sheet.show(
-      '모바일 사원증',
-      `<div class="idc">
-        <div class="idc-band"><img src="${A.BASE}/assets/icons/icon-192.png" alt=""><b>CONAS</b><span>EMPLOYEE ID</span></div>
-        <div class="idc-photo">${A.avatar({ name: m.name, av: m.av })}</div>
-        <div class="idc-name"><b>${esc(m.name)}</b><p>${esc(role)}</p></div>
-        <dl class="idc-rows">${rows.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
-        <div class="idc-live"><i></i><span><b>재직 중</b> · <time id="idcClock"></time></span></div>
+    const dept = m.role === 'ceo' ? '대표이사' : [m.team || '소속 없음', m.role === 'lead' ? '팀장' : m.position].filter(Boolean).join(' · ');
+    const no = 'CN' + String(m.id).padStart(5, '0');
+    const since = m.joined_on ? m.joined_on.replace(/^(\d+)-(\d+)-(\d+)$/, '$1. $2. $3') : '';
+    const photo = m.av
+      ? `<img src="${esc(m.av)}" alt="">`
+      : `<span class="idv-noimg" style="--av:${A.avatarColor(m.name)}">${esc([...(m.name || '?')][0])}</span>`;
+    const notice = `<span>정상 발급된 모바일 사원증입니다.</span><span class="idv-mk"><img src="${A.BASE}/assets/icons/icon-192.png" alt="">CONAS</span>`;
+    main.innerHTML = `<div class="idv">
+      <div class="idv-card">
+        <div class="idv-head">사원증</div>
+        <div class="idv-brand"><img src="${A.BASE}/assets/icons/icon-192.png" alt="">CONAS</div>
+        <div class="idv-photo">${photo}</div>
+        <b class="idv-name">${esc(m.name)}</b>
+        <p class="idv-dept">${esc(dept)}</p>
+        <p class="idv-no">${no}</p>
+        <div class="idv-ok">
+          <div><p>위 사람은 당사 출입을 허용함</p>${since ? `<p class="idv-date">${since}</p>` : ''}</div>
+          ${sealSvg()}
+        </div>
+        <button class="idv-back" data-act="idcard-back">${ic('reply', 20, 2.2)}돌아가기</button>
       </div>
-      <button class="btn ghost" data-go="ws/me" style="margin-top:14px">${ic('user', 18)}내 정보 · 사진 바꾸기</button>`,
-      { onClose: () => clearInterval(timer) }
-    );
+      <time class="idv-clock" id="idvClock"></time>
+      <div class="idv-marquee" aria-hidden="true"><div>${notice.repeat(3)}${notice.repeat(3)}</div></div>
+    </div>`;
     const tick = () => {
-      const el = A.$('#idcClock');
-      if (!el) return clearInterval(timer);
+      const el = A.$('#idvClock');
+      if (!el) return;
       const d = new Date();
-      el.textContent = `${d.getFullYear()}.${A.pad(d.getMonth() + 1)}.${A.pad(d.getDate())} (${A.DOW[d.getDay()]}) ${A.pad(d.getHours())}:${A.pad(d.getMinutes())}:${A.pad(d.getSeconds())}`;
+      const h = d.getHours();
+      el.textContent = `${d.getFullYear()}.${A.pad(d.getMonth() + 1)}.${A.pad(d.getDate())} (${A.DOW[d.getDay()]}) ${h < 12 ? '오전' : '오후'} ${A.pad(h % 12 || 12)}시 ${A.pad(d.getMinutes())}분 ${A.pad(d.getSeconds())}초`;
     };
     tick();
-    timer = setInterval(tick, 1000);
+    const timer = setInterval(tick, 1000);
+    A.onLeave(() => clearInterval(timer));
   };
+  A.acts['idcard-back'] = () => A.back('all');
 
   A.acts['theme-toggle'] = () => {
     A.theme.set(A.theme.get() === 'dark' ? 'light' : 'dark');

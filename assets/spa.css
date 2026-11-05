@@ -414,28 +414,33 @@ main.chat { background: var(--chat-bg); }
 .profile b { font-size: 19px; font-weight: 800; }
 .profile p { font-size: 14px; color: var(--sub); margin-top: 2px; }
 .idc-open { display: inline-flex; align-items: center; gap: 4px; height: 30px; padding: 0 10px; border-radius: 15px; background: var(--primary-soft); color: var(--primary); font-size: 13px; font-weight: 700; flex: none; }
-/* 모바일 사원증 */
-.idc { position: relative; border-radius: 22px; overflow: hidden; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-pill); }
-.idc-band { display: flex; align-items: center; gap: 8px; height: 92px; padding: 0 20px 28px; color: #fff; background: linear-gradient(120deg, var(--brand-a), var(--primary) 55%, var(--brand-b)); }
-.idc-band img { width: 26px; height: 26px; border-radius: 7px; background: #fff; padding: 2px; }
-.idc-band b { font-size: 17px; font-weight: 800; letter-spacing: .02em; }
-.idc-band span { margin-left: auto; font-size: 11px; font-weight: 800; letter-spacing: .16em; opacity: .9; }
-.idc-photo { display: flex; justify-content: center; margin-top: -48px; }
-.idc-photo .avatar { width: 112px; height: 112px; font-size: 44px; border: 5px solid var(--surface); box-sizing: content-box; box-shadow: 0 6px 18px rgba(25,31,40,.12); }
-.idc-name { text-align: center; padding: 12px 20px 4px; }
-.idc-name b { display: block; font-size: 26px; font-weight: 800; letter-spacing: -.02em; }
-.idc-name p { margin-top: 4px; font-size: 15px; font-weight: 600; color: var(--primary); }
-.idc-rows { margin: 14px 20px 0; border-top: 1px dashed var(--line-2); padding-top: 6px; }
-.idc-rows div { display: flex; justify-content: space-between; gap: 16px; padding: 9px 0; font-size: 14px; }
-.idc-rows dt { color: var(--sub); flex: none; }
-.idc-rows dd { font-weight: 600; text-align: right; min-width: 0; overflow-wrap: anywhere; }
-.idc-live { position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 14px; padding: 13px 16px; background: var(--ok-soft); color: var(--ok); font-size: 13px; font-variant-numeric: tabular-nums; }
-.idc-live i { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); animation: idcPulse 1.6s ease-in-out infinite; }
-.idc-live::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,.55) 50%, transparent 70%); transform: translateX(-100%); animation: idcShine 2.8s ease-in-out infinite; }
-:root[data-theme="dark"] .idc-live::after { background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,.12) 50%, transparent 70%); }
-@keyframes idcPulse { 50% { opacity: .35; transform: scale(.7); } }
-@keyframes idcShine { 60%, 100% { transform: translateX(100%); } }
-@media (prefers-reduced-motion: reduce) { .idc-live i, .idc-live::after { animation: none; } }
+/* 모바일 사원증 (#/idcard) */
+.idv > :first-child { margin-top: auto; }
+.idv > :last-child { margin-bottom: auto; }
+.idv { flex: 1; overflow-y: auto; display: flex; flex-direction: column; align-items: center; padding: max(20px, env(safe-area-inset-top)) 18px max(20px, env(safe-area-inset-bottom)); background: var(--surface-2); }
+.idv-card { width: 100%; max-width: 400px; background: var(--surface); border-radius: 26px; overflow: hidden; box-shadow: 0 10px 30px rgba(25,31,40,.08); text-align: center; padding-bottom: 26px; }
+.idv-head { height: 58px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 21px; font-weight: 800; letter-spacing: .04em; background: linear-gradient(90deg, var(--primary), #1098ad); }
+.idv-brand { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 28px 0 22px; font-size: 30px; font-weight: 900; letter-spacing: -.01em; color: var(--primary); }
+.idv-brand img { width: 38px; height: 38px; }
+.idv-photo { width: 132px; height: 170px; margin: 0 auto; border-radius: 10px; overflow: hidden; background: var(--surface-2); box-shadow: 0 0 0 1px var(--line); }
+.idv-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.idv-noimg { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; background: var(--av); color: #fff; font-size: 58px; font-weight: 800; }
+.idv-name { display: block; margin-top: 22px; font-size: 30px; font-weight: 900; letter-spacing: .02em; color: var(--primary); }
+.idv-dept { margin-top: 8px; font-size: 17px; color: var(--ink-2); }
+.idv-no { margin-top: 4px; font-size: 17px; color: var(--ink-2); letter-spacing: .04em; font-variant-numeric: tabular-nums; }
+.idv-ok { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 30px 24px 0; text-align: left; font-size: 16px; color: var(--ink-2); line-height: 1.55; }
+.idv-date { font-variant-numeric: tabular-nums; }
+.idv-seal { width: 58px; height: 58px; flex: none; color: #d9363e; transform: rotate(-3deg); opacity: .9; }
+.idv-seal text { fill: currentColor; font-size: 17px; font-weight: 900; font-family: "Nanum Myeongjo", "Batang", serif; }
+.idv-back { display: inline-flex; align-items: center; gap: 10px; margin-top: 28px; height: 52px; padding: 0 34px; border-radius: 26px; background: var(--primary-soft); color: var(--primary); font-size: 17px; font-weight: 800; }
+.idv-clock { margin-top: 22px; font-size: 20px; font-weight: 700; color: var(--primary); font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.idv-marquee { width: calc(100% + 36px); margin-top: 10px; overflow: hidden; background: var(--primary-soft); color: var(--primary); font-size: 15px; font-weight: 600; }
+.idv-marquee > div { display: flex; width: max-content; animation: idvRoll 18s linear infinite; }
+.idv-marquee span { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; white-space: nowrap; }
+.idv-mk { font-weight: 900; }
+.idv-mk img { width: 18px; height: 18px; }
+@keyframes idvRoll { to { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) { .idv-marquee > div { animation-duration: 60s; } }
 .menu-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 0; border-top: 1px solid var(--line); font-size: 15px; font-weight: 600; text-align: left; }
 .menu-row:first-child { border-top: 0; padding-top: 4px; }
 .menu-row .grow { flex: 1; }

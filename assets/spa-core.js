@@ -142,11 +142,13 @@
   // 사람
   // ==================================================================
   const AV_COLORS = ['#2f5bea', '#7b3ff2', '#0ca678', '#f08c00', '#e64980', '#1098ad', '#495057'];
+  /** 이름으로 정해지는 프로필 기본 색 */
+  A.avatarColor = (name) => AV_COLORS[[...(name || '?')].reduce((a, c) => a + c.charCodeAt(0), 0) % AV_COLORS.length];
   /** m: {name, av?, online?} / anon: true 면 익명 */
   A.avatar = (m, cls = '') => {
     if (!m || m.anon) return `<span class="avatar anon ${cls}" aria-hidden="true">${A.ic('user', 18)}</span>`;
     const name = m.name || '?';
-    const color = AV_COLORS[[...name].reduce((a, c) => a + c.charCodeAt(0), 0) % AV_COLORS.length];
+    const color = A.avatarColor(name);
     const on = m.online ? ' on' : '';
     if (m.av) return `<span class="avatar${on} ${cls}" aria-hidden="true"><img src="${A.esc(m.av)}" alt="" loading="lazy"></span>`;
     return `<span class="avatar${on} ${cls}" style="--av:${color}" aria-hidden="true">${A.esc([...name][0])}</span>`;
@@ -546,6 +548,7 @@
     if (a === 'all') return { ...r, sec: 'all', tab: 'all', view: 'all' };
     if (a === 'admin') return { ...r, sec: 'all', tab: 'all', view: 'admin', sub: b || 'members' };
     if (a === 'dm') return { ...r, sec: 'dm', tab: 'dm', view: 'dm' };
+    if (a === 'idcard') return { ...r, sec: 'all', tab: 'all', view: 'idcard', full: true };
     if (a === 'chat') {
       const fromCm = query.get('from') === 'cm' || (A.cache.convType && A.cache.convType[b] === 'channel');
       return { ...r, sec: fromCm ? 'cm' : 'dm', tab: fromCm ? 'chan' : 'dm', view: 'chat', id: Number(b), full: true };
