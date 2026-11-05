@@ -12,7 +12,7 @@
     const g = (title, items) => `<section class="card"><div class="card-h"><h3>${title}</h3></div><div class="all-grid">
       ${items.map(([n, i, c, to, cnt]) => `<button ${to.startsWith('act:') ? `data-act="${to.slice(4)}"` : `data-go="${to}"`}><span class="ai ${c}">${ic(i)}${cnt ? `<span class="count">${cnt > 99 ? '99+' : cnt}</span>` : ''}</span>${n}</button>`).join('')}</div></section>`;
     main.innerHTML = `
-      <section class="card"><button class="profile" data-go="ws/me">${A.avatar(me())}<div class="grow"><b>${esc(me().name)}</b><p>${esc(A.roleLabel(me()))}${me().is_admin ? ' · 관리자' : ''}</p></div>${ic('chevR', 18)}</button></section>
+      <section class="card"><button class="profile" data-act="id-card">${A.avatar(me())}<div class="grow"><b>${esc(me().name)}</b><p>${esc(A.roleLabel(me()))}${me().is_admin ? ' · 관리자' : ''}</p></div><span class="idc-open">${ic('card', 16, 2)}사원증</span></button></section>
       ${g('워크스페이스', [
         ['업무', 'checkSq', 'c-primary', 'ws/task', b.task],
         ['근태', 'calendar', 'c-cyan', 'ws/att'],
@@ -32,6 +32,43 @@
         ['로그아웃', 'logout', 'c-danger', 'act:logout'],
       ])}`;
   };
+  // ==================================================================
+  // 모바일 사원증 (전체 > 맨 위 프로필)
+  //  아래쪽 시계가 1초마다 움직여서 캡처한 화면이 아니라는 걸 보여줌
+  // ==================================================================
+  A.acts['id-card'] = () => {
+    const m = me();
+    const dot = (d) => (d ? d.replaceAll('-', '.') : '');
+    const role = m.role === 'ceo' ? '대표이사' : [m.position, m.role === 'lead' ? '팀장' : ''].filter(Boolean).join(' · ') || '팀원';
+    const rows = [
+      ['소속', m.role === 'ceo' ? 'CONAS' : m.team || '소속 없음'],
+      ['직급 · 직책', role],
+      ['입사일', dot(m.joined_on)],
+      ['이메일', m.email],
+    ].filter(([, v]) => v);
+    let timer = null;
+    A.sheet.show(
+      '모바일 사원증',
+      `<div class="idc">
+        <div class="idc-band"><img src="${A.BASE}/assets/icons/icon-192.png" alt=""><b>CONAS</b><span>EMPLOYEE ID</span></div>
+        <div class="idc-photo">${A.avatar({ name: m.name, av: m.av })}</div>
+        <div class="idc-name"><b>${esc(m.name)}</b><p>${esc(role)}</p></div>
+        <dl class="idc-rows">${rows.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
+        <div class="idc-live"><i></i><span><b>재직 중</b> · <time id="idcClock"></time></span></div>
+      </div>
+      <button class="btn ghost" data-go="ws/me" style="margin-top:14px">${ic('user', 18)}내 정보 · 사진 바꾸기</button>`,
+      { onClose: () => clearInterval(timer) }
+    );
+    const tick = () => {
+      const el = A.$('#idcClock');
+      if (!el) return clearInterval(timer);
+      const d = new Date();
+      el.textContent = `${d.getFullYear()}.${A.pad(d.getMonth() + 1)}.${A.pad(d.getDate())} (${A.DOW[d.getDay()]}) ${A.pad(d.getHours())}:${A.pad(d.getMinutes())}:${A.pad(d.getSeconds())}`;
+    };
+    tick();
+    timer = setInterval(tick, 1000);
+  };
+
   A.acts['theme-toggle'] = () => {
     A.theme.set(A.theme.get() === 'dark' ? 'light' : 'dark');
     A.refresh();
