@@ -605,6 +605,25 @@ main.chat { animation: chatIn .32s cubic-bezier(.2,.7,.2,1); }
 .msg.me .msg-side { align-items: flex-end; }
 .msg.me .bubble { background: var(--primary); color: #fff; }
 .msg.me:not(.cont) .bubble-stack > :first-child.bubble { border-top-right-radius: 5px; }
+/* 메시지 반응 · 삭제 */
+.rx-row { display: flex; flex-wrap: wrap; gap: 4px; }
+.msg.me .rx-row { justify-content: flex-end; }
+.rx-pill { display: inline-flex; align-items: center; gap: 3px; height: 26px; padding: 0 9px 0 7px; border-radius: 13px; background: var(--surface); border: 1px solid var(--line); font-size: 14px; line-height: 1; box-shadow: 0 1px 1px rgba(0,0,0,.04); }
+.rx-pill b { font-size: 12px; font-weight: 700; color: var(--ink-2); }
+.rx-pill.on { background: var(--primary-soft); border-color: var(--primary); }
+.rx-pill.on b { color: var(--primary); }
+.bubble.msg-del { display: inline-flex; align-items: center; gap: 5px; color: var(--sub); background: var(--surface); border: 1px dashed var(--line-2); box-shadow: none; font-size: 14px; }
+.msg.me .bubble.msg-del { background: var(--surface); color: var(--sub); }
+.rx-bar { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; padding: 4px 0 10px; }
+.rx-bar button { aspect-ratio: 1; max-width: 52px; justify-self: center; width: 100%; border-radius: 50%; font-size: 27px; line-height: 1; display: flex; align-items: center; justify-content: center; background: var(--surface-2); transition: transform .15s var(--spring); }
+.rx-bar button:active { transform: scale(1.25); }
+.rx-bar button.on { background: var(--primary-soft); box-shadow: 0 0 0 2px var(--primary); }
+.rx-whos { padding: 2px 2px 8px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.rx-who { display: flex; gap: 8px; align-items: baseline; font-size: 13px; color: var(--sub); padding: 3px 0; }
+.rx-who span { font-size: 16px; }
+.msg-menu .menu-row:first-child { padding-top: 14px; }
+.menu-row.danger-row { color: var(--danger); }
+@media (pointer: coarse) { .msgs .bubble, .msgs .imgs { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; } }
 .msg.me .bubble a { color: #fff; }
 .msg .imgs { display: block; border-radius: 14px; overflow: hidden; background: var(--surface-2); cursor: zoom-in; }
 .msg .imgs img { max-width: min(240px, 60vw); max-height: 280px; display: block; transition: transform .2s; }

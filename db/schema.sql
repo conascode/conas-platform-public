@@ -250,6 +250,7 @@ CREATE TABLE IF NOT EXISTS `in_conversation_members` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 메시지 (client_msg_id: 화면이 만든 임시 id, 재전송 중복 방지. 'sys:'로 시작하면 안내 메시지)
+--   삭제해도 실제로 지우지 않고 deleted_at 만 남김 (화면에는 '삭제된 메시지예요')
 CREATE TABLE IF NOT EXISTS `in_messages` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `conversation_id` int NOT NULL,
@@ -257,11 +258,27 @@ CREATE TABLE IF NOT EXISTS `in_messages` (
   `body` text NOT NULL,
   `client_msg_id` varchar(40) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `deleted_at` timestamp NULL DEFAULT NULL COMMENT '삭제한 시각 (실제로 지우지 않고 표시만)',
+  `changed_at` timestamp NULL DEFAULT NULL COMMENT '반응 · 삭제가 바뀐 시각 (다른 사람 화면 갱신용)',
   PRIMARY KEY (`id`),
   KEY `idx_conv` (`conversation_id`,`id`),
   KEY `fk_in_msg_user` (`user_id`),
+  KEY `idx_changed` (`conversation_id`,`changed_at`),
   CONSTRAINT `fk_in_msg_conv` FOREIGN KEY (`conversation_id`) REFERENCES `in_conversations` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_in_msg_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 메시지 반응: 한 사람이 메시지 하나에 반응 하나 (카카오톡처럼, 다른 걸 고르면 바뀜)
+--   reaction: heart ❤️, like 👍, check ✅, laugh 😆, wow 😮, sad 😥
+CREATE TABLE IF NOT EXISTS `in_message_reactions` (
+  `message_id` bigint NOT NULL,
+  `user_id` int NOT NULL,
+  `reaction` varchar(10) NOT NULL COMMENT 'heart, like, check, laugh, wow, sad',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`message_id`,`user_id`),
+  KEY `idx_user` (`user_id`),
+  CONSTRAINT `fk_in_mreact_msg` FOREIGN KEY (`message_id`) REFERENCES `in_messages` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_in_mreact_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =====================================================================

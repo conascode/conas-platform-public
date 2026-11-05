@@ -24,7 +24,7 @@ if ($a['post_id'] !== null) {
         'SELECT 1 FROM in_messages m
            JOIN in_conversation_members cm ON cm.conversation_id = m.conversation_id AND cm.user_id = ?
            JOIN in_conversations c ON c.id = m.conversation_id
-          WHERE m.id = ? AND (c.type = \'channel\' OR m.created_at >= cm.joined_at)',
+          WHERE m.id = ? AND m.deleted_at IS NULL AND (c.type = \'channel\' OR m.created_at >= cm.joined_at)',
         [$u['id'], (int)$a['message_id']]
     )->fetchColumn();
 } elseif ($a['approval_id'] !== null) {

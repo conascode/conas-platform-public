@@ -554,7 +554,31 @@
   // ==================================================================
   // 대화방 (채널 · DM 공용)
   // ==================================================================
-  const CH = { info: null, msgs: [], reads: {}, since: 0, hasMore: false, timer: null, pending: new Map() };
+  const CH = { info: null, msgs: [], reads: {}, since: 0, changed: 0, hasMore: false, timer: null, pending: new Map() };
+
+  /** 메시지 반응 (서버 MSG_REACTIONS 와 같은 순서) */
+  const REACT = [
+    ['heart', '❤️', '좋아요'],
+    ['like', '👍', '최고예요'],
+    ['check', '✅', '확인했어요'],
+    ['laugh', '😆', '웃겨요'],
+    ['wow', '😮', '놀라워요'],
+    ['sad', '😥', '슬퍼요'],
+  ];
+  const REACT_EMOJI = Object.fromEntries(REACT.map(([k, e]) => [k, e]));
+  /** 반응 중 내가 누른 것 */
+  const myRx = (m) => Object.keys(m.rx || {}).find((k) => (m.rx[k] || []).includes(me().id)) || null;
+  /** 반응 누르기: 같은 걸 누르면 취소, 다른 걸 누르면 바꿈 (한 사람당 하나) */
+  function toggleRx(rx, key, uid) {
+    const out = {};
+    const had = (rx[key] || []).includes(uid);
+    for (const k in rx) {
+      const list = (rx[k] || []).filter((x) => x !== uid);
+      if (list.length) out[k] = list;
+    }
+    if (!had) out[key] = (out[key] || []).concat(uid);
+    return out;
+  }
 
   function chatHead(info) {
     if (info.type === 'channel') {
@@ -601,8 +625,10 @@
     CH.msgs = d.messages;
     CH.reads = d.reads || {};
     CH.since = d.since || 0;
+    CH.changed = d.now || Math.floor(Date.now() / 1000);
     CH.hasMore = d.has_more;
     drawMsgs(true);
+    bindMsgPress(A.$('#msgs'));
     markRead();
     const form = A.$('form[data-form="chat-send"]');
     const ta = A.$('textarea', form);
@@ -616,9 +642,24 @@
       if (!A.isCurrent('chat') || A.route.id !== c) return;
       if (!document.hidden) {
         try {
-          const p = await A.legacy('poll.php', { since: CH.since, c, active: 1 });
+          const p = await A.legacy('poll.php', { since: CH.since, c, active: 1, changed: CH.changed });
           if (!A.isCurrent('chat') || A.route.id !== c) return;
           let changed = false;
+          // 다른 사람이 누른 반응 · 삭제한 메시지 반영
+          if (p.now) CH.changed = p.now - 1; // 같은 초에 바뀐 것을 놓치지 않게 1초 겹쳐서 확인
+          if (p.changed && p.changed.length) {
+            let diff = false;
+            for (const nm of p.changed) {
+              const i = CH.msgs.findIndex((x) => x.id === nm.id);
+              if (i < 0) continue;
+              const om = CH.msgs[i];
+              if (om.deleted !== nm.deleted || JSON.stringify(om.rx || {}) !== JSON.stringify(nm.rx || {})) {
+                CH.msgs[i] = { ...om, ...nm };
+                diff = true;
+              }
+            }
+            if (diff) redrawKeep();
+          }
           if (p.messages && p.messages.length) {
             CH.since = Math.max(CH.since, ...p.messages.map((m) => m.id));
             const mine = p.messages.filter((m) => m.c === c && !CH.msgs.some((x) => x.id === m.id) && !(m.cid && CH.pending.has(m.cid)));
@@ -728,7 +769,10 @@
       const showTime = !(next && !next.sys && next.uid === m.uid && sameDay(next) && A.hm(next.ts) === A.hm(m.ts));
       const mine = m.uid === me().id;
       const files = (m.files || []).map(fileHtml).join('');
-      const body = `${m.body ? `<div class="bubble msg-body">${A.linkify(m.body)}</div>` : ''}${files}`;
+      const rx = m.deleted ? '' : rxHtml(m);
+      const body = m.deleted
+        ? `<div class="bubble msg-del">${ic('x', 14, 2.4)}삭제된 메시지예요</div>`
+        : `${m.body ? `<div class="bubble msg-body">${A.linkify(m.body)}</div>` : ''}${files}${rx}`;
       const n = unreadOf(m);
       const side = `<span class="msg-side"><span class="rc">${n || ''}</span>${m.sending ? '<span class="time">보내는 중</span>' : showTime ? `<span class="time">${A.hm(m.ts)}</span>` : ''}</span>`;
       const row = `<div class="bubble-row"><div class="bubble-stack">${body}</div>${side}</div>`;
@@ -747,6 +791,148 @@
     box.innerHTML = html;
     if (toBottom) box.scrollTop = box.scrollHeight;
   }
+
+  /** 말풍선 아래 반응 (❤️ 2  😥 1). 누르면 나도 같은 반응 / 다시 누르면 취소 */
+  function rxHtml(m) {
+    const rx = m.rx || {};
+    const mine = myRx(m);
+    const pills = REACT.filter(([k]) => (rx[k] || []).length)
+      .map(([k, e]) => `<button type="button" class="rx-pill ${mine === k ? 'on' : ''}" data-act="msg-rx" data-mid="${m.id}" data-r="${k}">${e}<b>${rx[k].length}</b></button>`)
+      .join('');
+    return pills ? `<div class="rx-row">${pills}</div>` : '';
+  }
+
+  /** 다시 그리되 보던 위치는 그대로 (맨 아래를 보고 있었으면 맨 아래로) */
+  function redrawKeep() {
+    const box = A.$('#msgs');
+    if (!box) return;
+    const bottom = nearBottom();
+    const st = box.scrollTop;
+    drawMsgs(false);
+    box.scrollTop = bottom ? box.scrollHeight : st;
+  }
+
+  /**
+   * 메시지 길게 누르기(휴대폰) · 오른쪽 클릭(컴퓨터) → 반응 · 복사 · 삭제 메뉴
+   */
+  function bindMsgPress(box) {
+    if (!box) return;
+    let timer = null;
+    let sx = 0;
+    let sy = 0;
+    let fired = false;
+    let lastOpen = 0;
+    const hit = (e) => {
+      const row = e.target.closest('[data-mid]');
+      if (!row || !e.target.closest('.bubble, .imgs, .file-row')) return null;
+      return Number(row.dataset.mid);
+    };
+    const open = (id) => {
+      if (Date.now() - lastOpen < 700) return;
+      lastOpen = Date.now();
+      openMsgMenu(id);
+    };
+    box.addEventListener(
+      'touchstart',
+      (e) => {
+        const id = hit(e);
+        fired = false;
+        if (!id) return;
+        sx = e.touches[0].clientX;
+        sy = e.touches[0].clientY;
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          fired = true;
+          if (navigator.vibrate) navigator.vibrate(12);
+          open(id);
+        }, 450);
+      },
+      { passive: true }
+    );
+    box.addEventListener(
+      'touchmove',
+      (e) => {
+        if (timer && (Math.abs(e.touches[0].clientX - sx) > 10 || Math.abs(e.touches[0].clientY - sy) > 10)) {
+          clearTimeout(timer);
+          timer = null;
+        }
+      },
+      { passive: true }
+    );
+    box.addEventListener('touchend', (e) => {
+      clearTimeout(timer);
+      timer = null;
+      if (fired && e.cancelable) e.preventDefault(); // 길게 누른 뒤 손을 떼도 사진 열기 등이 눌리지 않게
+    });
+    box.addEventListener('contextmenu', (e) => {
+      const id = hit(e);
+      if (!id) return;
+      e.preventDefault();
+      open(id);
+    });
+  }
+
+  function openMsgMenu(id) {
+    const m = CH.msgs.find((x) => x.id === id);
+    if (!m || m.id <= 0 || m.sys || m.deleted) return;
+    const mine = myRx(m);
+    const who = REACT.filter(([k]) => (m.rx && m.rx[k] || []).length)
+      .map(([k, e]) => `<p class="rx-who"><span>${e}</span>${esc(m.rx[k].map((uid) => (uid === me().id ? '나' : (A.mem(uid) || {}).name || '(알 수 없음)')).join(', '))}</p>`)
+      .join('');
+    A.sheet.show(
+      '',
+      `<div class="rx-bar">${REACT.map(([k, e, label]) => `<button type="button" class="${mine === k ? 'on' : ''}" data-act="msg-rx" data-mid="${m.id}" data-r="${k}" aria-label="${label}">${e}</button>`).join('')}</div>
+      ${who ? `<div class="rx-whos">${who}</div>` : ''}
+      <div class="msg-menu">
+        ${m.body ? `<button class="menu-row" data-act="msg-copy" data-mid="${m.id}">${ic('file', 18)}<span class="grow">복사</span></button>` : ''}
+        ${m.uid === me().id ? `<button class="menu-row danger-row" data-act="msg-del" data-mid="${m.id}">${ic('trash', 18)}<span class="grow">삭제</span></button>` : ''}
+      </div>`
+    );
+  }
+
+  A.acts['msg-rx'] = async (el) => {
+    const id = Number(el.dataset.mid);
+    const key = el.dataset.r;
+    const m = CH.msgs.find((x) => x.id === id);
+    if (!m || m.deleted) return;
+    if (A.sheet.open) A.sheet.close();
+    const before = m.rx || {};
+    m.rx = toggleRx(before, key, me().id); // 먼저 화면에 반영
+    redrawKeep();
+    try {
+      const r = await A.post('msg.react', { id, reaction: key });
+      m.rx = r.rx || {};
+    } catch (e) {
+      m.rx = before;
+      A.err(e);
+    }
+    if (A.isCurrent('chat')) redrawKeep();
+  };
+  A.acts['msg-copy'] = async (el) => {
+    const m = CH.msgs.find((x) => x.id === Number(el.dataset.mid));
+    A.sheet.close();
+    if (!m) return;
+    try {
+      await navigator.clipboard.writeText(m.body);
+    } catch (e) {
+      const t = document.createElement('textarea');
+      t.value = m.body;
+      document.body.appendChild(t);
+      t.select();
+      document.execCommand('copy');
+      t.remove();
+    }
+    A.toast('복사했어요');
+  };
+  A.acts['msg-del'] = async (el) => {
+    const id = Number(el.dataset.mid);
+    if (!(await A.ask({ title: '메시지 삭제', body: '이 메시지를 삭제할까요?\n대화 상대 모두에게 "삭제된 메시지예요"로 보여요.', ok: '삭제', danger: true }))) return;
+    await A.post('msg.delete', { id });
+    const m = CH.msgs.find((x) => x.id === id);
+    if (m) Object.assign(m, { deleted: true, body: '', files: [], rx: {} });
+    if (A.isCurrent('chat')) redrawKeep();
+    A.toast('메시지를 삭제했어요');
+  };
 
   A.acts['chat-more'] = async (el) => {
     el.disabled = true;

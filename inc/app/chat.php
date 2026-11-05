@@ -21,7 +21,7 @@ function api_chats(array $me, array $in): array
     $rows = q(
         'SELECT c.id, c.type, c.name, c.description, c.dm_key, c.last_message_id, UNIX_TIMESTAMP(c.updated_at) AS updated_ts,
                 cm.last_read_message_id, cm.user_id IS NOT NULL AS joined,
-                lm.body AS last_body, lm.user_id AS last_uid, lm.client_msg_id AS last_cid, UNIX_TIMESTAMP(lm.created_at) AS last_ts,
+                IF(lm.deleted_at IS NULL, lm.body, NULL) AS last_body, lm.deleted_at IS NOT NULL AS last_deleted, lm.user_id AS last_uid, lm.client_msg_id AS last_cid, UNIX_TIMESTAMP(lm.created_at) AS last_ts,
                 (lm.created_at >= cm.joined_at OR c.type = \'channel\') AS last_visible,
                 (SELECT COUNT(*) FROM in_attachments a WHERE a.message_id = lm.id) AS last_files,
                 (SELECT COUNT(*) FROM in_conversation_members x WHERE x.conversation_id = c.id) AS member_count,
@@ -46,7 +46,7 @@ function api_chats(array $me, array $in): array
         $cid = (int)$r['id'];
         $hasLast = $r['last_message_id'] && $r['last_visible'];
         $isSys = str_starts_with((string)$r['last_cid'], 'sys:');
-        $preview = $hasLast ? chat_preview($r['last_body'], (int)$r['last_files']) : '';
+        $preview = !$hasLast ? '' : ($r['last_deleted'] ? '삭제된 메시지예요' : chat_preview($r['last_body'], (int)$r['last_files']));
         $base = [
             'id' => $cid,
             'type' => $r['type'],
@@ -275,6 +275,48 @@ function api_chat_leave(array $me, array $in): array
     q('DELETE FROM in_conversation_members WHERE conversation_id = ? AND user_id = ?', [$c, $me['id']]);
     $pdo->commit();
     return ['ok' => true];
+}
+
+/**
+ * 메시지 반응 (카카오톡처럼 한 사람당 하나)
+ *  같은 반응을 다시 누르면 취소, 다른 반응을 누르면 바뀜
+ */
+function api_msg_react(array $me, array $in): array
+{
+    $id = int_in($in, 'id');
+    $reaction = (string)($in['reaction'] ?? '');
+    if (!in_array($reaction, MSG_REACTIONS, true)) fail('알 수 없는 반응이에요.');
+    $m = chat_message_for($id, $me['id']);
+    if (!$m || str_starts_with((string)$m['client_msg_id'], 'sys:')) fail('메시지를 찾을 수 없어요.', 404);
+    if ($m['deleted_at'] !== null) fail('삭제된 메시지예요.');
+    $cur = q('SELECT reaction FROM in_message_reactions WHERE message_id = ? AND user_id = ?', [$id, $me['id']])->fetchColumn();
+    if ($cur === $reaction) {
+        q('DELETE FROM in_message_reactions WHERE message_id = ? AND user_id = ?', [$id, $me['id']]);
+    } else {
+        q(
+            'INSERT INTO in_message_reactions (message_id, user_id, reaction) VALUES (?, ?, ?)
+             ON DUPLICATE KEY UPDATE reaction = VALUES(reaction), created_at = NOW()',
+            [$id, $me['id'], $reaction]
+        );
+    }
+    q('UPDATE in_messages SET changed_at = NOW() WHERE id = ?', [$id]);
+    return ['ok' => true, 'id' => $id, 'rx' => (object)(chat_reactions([$id])[$id] ?? [])];
+}
+
+/**
+ * 메시지 삭제: 내가 보낸 메시지만. DB에서 지우지 않고 삭제 표시만 남김
+ *  대화 상대 모두에게 '삭제된 메시지예요'로 보이고, 내용 · 첨부 · 반응은 더 이상 보이지 않음
+ */
+function api_msg_delete(array $me, array $in): array
+{
+    $id = int_in($in, 'id');
+    $m = chat_message_for($id, $me['id']);
+    if (!$m || str_starts_with((string)$m['client_msg_id'], 'sys:')) fail('메시지를 찾을 수 없어요.', 404);
+    if ((int)$m['user_id'] !== $me['id']) fail('내가 보낸 메시지만 삭제할 수 있어요.', 403);
+    if ($m['deleted_at'] === null) {
+        q('UPDATE in_messages SET deleted_at = NOW(), changed_at = NOW() WHERE id = ?', [$id]);
+    }
+    return ['ok' => true, 'id' => $id];
 }
 
 /**

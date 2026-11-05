@@ -18,7 +18,7 @@ const DB_PASS = 'yunsh##8928';
 // ===== 앱 기본 정보 =====
 const APP_NAME       = 'CONAS 사내';
 const APP_SHORT_NAME = 'CONAS';
-const APP_VERSION    = '2.0.6';     // CSS/JS를 수정하면 숫자를 올려주세요 (앱 캐시 갱신)
+const APP_VERSION    = '2.0.7';     // CSS/JS를 수정하면 숫자를 올려주세요 (앱 캐시 갱신)
 const BASE_PATH      = '/in';       // conas.kr/in/
 const THEME_COLOR    = '#2f5bea';
 
