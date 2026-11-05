@@ -49,6 +49,7 @@ $routes = [
     'chat.dm'        => ['POST', 'chat'],
     'chat.join'      => ['POST', 'chat'],
     'chat.leave'     => ['POST', 'chat'],
+    'chat.kick'      => ['POST', 'chat'],
     'chat.group'     => ['POST', 'chat'],
     'chat.invite'    => ['POST', 'chat'],
     'chat.rename'    => ['POST', 'chat'],

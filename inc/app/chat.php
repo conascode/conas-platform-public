@@ -134,6 +134,7 @@ function api_chat_info(array $me, array $in): array
         'other' => $other,
         'can_edit' => $conv['type'] === 'channel' ? ((int)$conv['created_by'] === $me['id'] || $me['is_admin']) : $conv['type'] === 'group',
         'can_invite' => $joined && $conv['type'] !== 'channel',
+        'can_kick' => $conv['type'] === 'channel' && $me['is_admin'],
     ];
 }
 
@@ -273,6 +274,26 @@ function api_chat_leave(array $me, array $in): array
     }
     q('DELETE FROM in_conversation_members WHERE conversation_id = ? AND user_id = ?', [$c, $me['id']]);
     $pdo->commit();
+    return ['ok' => true];
+}
+
+/**
+ * 관리자: 채널에서 사람 내보내기
+ *  채널은 공개방이라 내보낸 사람도 원하면 다시 '참여하기'로 들어올 수 있음
+ */
+function api_chat_kick(array $me, array $in): array
+{
+    if (!$me['is_admin']) fail('관리자만 내보낼 수 있어요.', 403);
+    $c = int_in($in, 'c');
+    $uid = int_in($in, 'user_id');
+    $conv = q("SELECT id, name FROM in_conversations WHERE id = ? AND type = 'channel'", [$c])->fetch();
+    if (!$conv) fail('채널을 찾을 수 없어요.', 404);
+    if ($uid === $me['id']) fail('내 계정은 나가기로 나와 주세요.');
+    $n = q('DELETE FROM in_conversation_members WHERE conversation_id = ? AND user_id = ?', [$c, $uid])->rowCount();
+    if (!$n) fail('이 채널에 참여 중인 사람이 아니에요.', 404);
+    if (org_member($uid)) {
+        notify($uid, 'chat', '채널에서 내보내졌어요', '#' . $conv['name'] . ' · 관리자가 내보냈어요', '/cm/chan');
+    }
     return ['ok' => true];
 }
 

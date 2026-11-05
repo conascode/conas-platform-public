@@ -47,13 +47,8 @@ function api_admin_member(array $me, array $in): array
     switch ($action) {
         case 'approve':
         case 'enable':
+            // 채널에는 자동으로 넣지 않음: 필요한 채널은 본인이 '참여하기'로 들어감
             q("UPDATE in_members SET status = 'active' WHERE user_id = ?", [$id]);
-            // 공개 채널에 자동 참여
-            q(
-                "INSERT IGNORE INTO in_conversation_members (conversation_id, user_id, last_read_message_id)
-                 SELECT id, ?, COALESCE(last_message_id, 0) FROM in_conversations WHERE type = 'channel'",
-                [$id]
-            );
             break;
         case 'disable':
             q("UPDATE in_members SET status = 'disabled' WHERE user_id = ?", [$id]);

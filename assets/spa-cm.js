@@ -766,7 +766,14 @@
   A.acts['chat-info'] = () => {
     const c = CH.info;
     const title = c.type === 'channel' ? '#' + c.title : c.type === 'dm' ? '대화 정보' : c.title;
-    const memRow = (m) => `<button class="list-item" data-act="person" data-id="${m.id}">${A.avatar(m)}<span class="grow"><b class="t15">${esc(m.name)}</b>${m.id === me().id ? ' <span class="tag">나</span>' : ''}<span class="t13 muted block">${esc(m.gone ? '퇴사 · 정지된 계정' : A.roleLabel(m))}</span></span>${ic('chevR', 18)}</button>`;
+    const kickable = (m) => c.can_kick && m.id !== me().id;
+    const memRow = (m) => {
+      const row = `<button class="list-item" data-act="person" data-id="${m.id}">${A.avatar(m)}<span class="grow"><b class="t15">${esc(m.name)}</b>${m.id === me().id ? ' <span class="tag">나</span>' : ''}<span class="t13 muted block">${esc(m.gone ? '퇴사 · 정지된 계정' : A.roleLabel(m))}</span></span>${kickable(m) ? '' : ic('chevR', 18)}</button>`;
+      // 관리자: 채널 참여자 옆에 내보내기 버튼
+      return kickable(m)
+        ? `<div class="mem-line">${row}<button class="btn sm danger" data-act="chan-kick" data-id="${m.id}">내보내기</button></div>`
+        : row;
+    };
     const people = c.type === 'dm' && c.other && c.other.left ? c.members.concat([c.other]) : c.members;
     A.sheet.show(
       title,
@@ -780,6 +787,20 @@
         ${c.joined ? `<button class="btn danger" data-act="chat-leave">${ic('logout', 18)}나가기</button>` : ''}
       </div>`
     );
+  };
+  A.acts['chan-kick'] = async (el) => {
+    const id = Number(el.dataset.id);
+    const m = CH.info.members.find((x) => x.id === id);
+    const name = m ? m.name : '이 사람';
+    if (!(await A.ask({ title: '내보내기', body: `${name}님을 #${CH.info.title} 채널에서 내보낼까요?\n본인이 원하면 다시 참여할 수 있어요.`, ok: '내보내기', danger: true }))) return;
+    try {
+      await A.post('chat.kick', { c: CH.info.id, user_id: id });
+    } catch (e) {
+      return A.err(e);
+    }
+    A.toast(`${name}님을 내보냈어요`);
+    await refreshInfo();
+    A.acts['chat-info']();
   };
   A.acts['chat-invite'] = () => openPicker('invite');
   A.acts['chat-rename'] = () => {
@@ -827,9 +848,18 @@
       ${m.role !== 'member' ? `<span class="tag primary">${A.ROLE[m.role]}</span>` : ''}
     </button>`;
   }
+  /**
+   * 임직원 화면에 보일 사람
+   *  팀에 배정되지 않은 사람(대표 제외)은 대표 · 관리자에게만 보임. 본인은 항상 보임
+   */
+  function peopleVisible() {
+    const all = A.data.members;
+    if (me().can_manage) return all;
+    return all.filter((m) => m.role === 'ceo' || m.team_id || m.id === me().id);
+  }
   function peopleRes() {
     const q = PP.q.trim().toLowerCase();
-    const all = A.data.members;
+    const all = peopleVisible();
     if (q) {
       const r = all.filter((m) => [m.name, m.team, A.ROLE[m.role], m.position, m.email, m.phone, m.username].join(' ').toLowerCase().includes(q));
       return `<section class="card"><div class="card-h"><h3>검색 결과</h3><span class="t13 muted">${r.length}명</span></div>${r.map(personRow).join('') || '<div class="empty">찾는 사람이 없어요</div>'}</section>`;
@@ -849,7 +879,7 @@
   }
   function drawPeople(main) {
     main.innerHTML = `
-      <div class="page-h"><div><h2>임직원</h2><p>CONAS · ${A.data.members.length}명${A.isCeo() ? ' · 직원을 누르면 직책을 바꿀 수 있어요' : ''}</p></div>
+      <div class="page-h"><div><h2>임직원</h2><p>CONAS · ${peopleVisible().length}명${A.isCeo() ? ' · 직원을 누르면 직책을 바꿀 수 있어요' : ''}</p></div>
         ${A.isCeo() ? `<button class="new-btn" data-act="teams">${ic('settings', 16)}팀 관리</button>` : ''}</div>
       <label class="search">${ic('search', 20)}<input id="peopleQ" placeholder="이름, 팀, 직책, 연락처로 검색" value="${esc(PP.q)}" autocomplete="off">
         <button type="button" class="search-x" id="peopleX" ${PP.q ? '' : 'hidden'} aria-label="지우기">${ic('x', 16, 2.4)}</button></label>
