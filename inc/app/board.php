@@ -57,7 +57,6 @@ function api_posts(array $me, array $in): array
         $posts[] = [
             'id' => (int)$r['id'],
             'title' => $r['title'],
-            'preview' => mb_strimwidth(preg_replace('/\s+/u', ' ', $r['body']) ?? '', 0, 90, '…'),
             'anon' => $anon,
             'author' => $anon ? '익명' : org_name($uid),
             'author_id' => $anon ? null : $uid,
@@ -202,6 +201,14 @@ function api_post_save(array $me, array $in): array
     );
     $id = (int)db()->lastInsertId();
     if ($b['allow_attachments']) att_claim(array_slice($fileIds, 0, (int)$b['max_files']), $me['id'], 'post_id', $id);
+
+    // 새 글 알림: 이 게시판을 볼 수 있는 직원 모두 (쓴 사람 제외). 익명 게시판이면 이름은 빼고 제목만
+    $to = [];
+    foreach (org_members() as $m) {
+        if ($m['id'] !== $me['id'] && can_view_board($b, $m)) $to[] = $m['id'];
+    }
+    notify($to, 'post', $b['name'] . '에 새 글이 올라왔어요', ($b['is_anonymous'] ? '' : $me['name'] . ' · ') . $title, '/cm/post/' . $id);
+
     return ['ok' => true, 'id' => $id];
 }
 

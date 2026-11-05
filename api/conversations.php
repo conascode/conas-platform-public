@@ -9,7 +9,7 @@ $u = api_member();
 $rows = q(
     'SELECT c.id, c.type, c.name, c.last_message_id, UNIX_TIMESTAMP(c.updated_at) AS updated_ts,
             cm.last_read_message_id,
-            lm.body AS last_body, lm.user_id AS last_uid, UNIX_TIMESTAMP(lm.created_at) AS last_ts,
+            IF(lm.deleted_at IS NULL, lm.body, NULL) AS last_body, lm.user_id AS last_uid, UNIX_TIMESTAMP(lm.created_at) AS last_ts,
             (SELECT COUNT(*) FROM in_attachments a WHERE a.message_id = lm.id) AS last_files,
             (SELECT COUNT(*) FROM in_messages x
               WHERE x.conversation_id = c.id AND x.id > cm.last_read_message_id

@@ -12,7 +12,7 @@ function api_admin_members(array $me, array $in): array
 {
     require_admin_me($me);
     $rows = q(
-        'SELECT u.id, u.username, u.email, m.display_name, m.avatar, m.status, m.is_admin, m.role,
+        'SELECT u.id, u.username, u.email, m.display_name, m.employee_no, m.avatar, m.status, m.is_admin, m.role,
                 UNIX_TIMESTAMP(m.created_at) AS created_ts, UNIX_TIMESTAMP(m.last_seen_at) AS seen_ts
            FROM in_members m JOIN users u ON u.id = m.user_id
           ORDER BY FIELD(m.status, \'pending\', \'active\', \'disabled\'), m.created_at DESC
@@ -23,6 +23,7 @@ function api_admin_members(array $me, array $in): array
         'name' => user_label($r),
         'username' => $r['username'],
         'email' => $r['email'],
+        'employee_no' => $r['employee_no'],
         'av' => avatar_url((int)$r['id'], $r['avatar']),
         'status' => $r['status'],
         'is_admin' => (bool)$r['is_admin'],
@@ -47,13 +48,8 @@ function api_admin_member(array $me, array $in): array
     switch ($action) {
         case 'approve':
         case 'enable':
+            // 채널에는 자동으로 넣지 않음: 필요한 채널은 본인이 '참여하기'로 들어감
             q("UPDATE in_members SET status = 'active' WHERE user_id = ?", [$id]);
-            // 공개 채널에 자동 참여
-            q(
-                "INSERT IGNORE INTO in_conversation_members (conversation_id, user_id, last_read_message_id)
-                 SELECT id, ?, COALESCE(last_message_id, 0) FROM in_conversations WHERE type = 'channel'",
-                [$id]
-            );
             break;
         case 'disable':
             q("UPDATE in_members SET status = 'disabled' WHERE user_id = ?", [$id]);
@@ -65,6 +61,17 @@ function api_admin_member(array $me, array $in): array
             break;
         case 'revoke_admin':
             q('UPDATE in_members SET is_admin = 0 WHERE user_id = ?', [$id]);
+            break;
+        case 'employee_no':
+            // 사원번호: 영문 · 숫자 · - _ . 만, 20자까지. 비우면 지움. 다른 사람과 겹치면 안 됨
+            $no = str_in($in, 'employee_no', 30);
+            if ($no !== '' && !preg_match('/^[A-Za-z0-9._-]{1,20}$/', $no)) {
+                fail('사원번호는 영문, 숫자, - _ . 만 써서 20자 이내로 입력해 주세요.');
+            }
+            if ($no !== '' && q('SELECT 1 FROM in_members WHERE employee_no = ? AND user_id <> ?', [$no, $id])->fetchColumn()) {
+                fail('이미 다른 사람이 쓰고 있는 사원번호예요.');
+            }
+            q('UPDATE in_members SET employee_no = ? WHERE user_id = ?', [$no !== '' ? $no : null, $id]);
             break;
         default:
             fail('알 수 없는 작업이에요.');

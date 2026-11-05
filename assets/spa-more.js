@@ -12,7 +12,7 @@
     const g = (title, items) => `<section class="card"><div class="card-h"><h3>${title}</h3></div><div class="all-grid">
       ${items.map(([n, i, c, to, cnt]) => `<button ${to.startsWith('act:') ? `data-act="${to.slice(4)}"` : `data-go="${to}"`}><span class="ai ${c}">${ic(i)}${cnt ? `<span class="count">${cnt > 99 ? '99+' : cnt}</span>` : ''}</span>${n}</button>`).join('')}</div></section>`;
     main.innerHTML = `
-      <section class="card"><button class="profile" data-go="ws/me">${A.avatar(me())}<div class="grow"><b>${esc(me().name)}</b><p>${esc(A.roleLabel(me()))}${me().is_admin ? ' · 관리자' : ''}</p></div>${ic('chevR', 18)}</button></section>
+      <section class="card"><button class="profile" data-act="id-card">${A.avatar(me())}<div class="grow"><b>${esc(me().name)}</b><p>${esc(A.roleLabel(me()))}${me().is_admin ? ' · 관리자' : ''}</p></div><span class="idc-open">${ic('card', 16, 2)}사원증</span></button></section>
       ${g('워크스페이스', [
         ['업무', 'checkSq', 'c-primary', 'ws/task', b.task],
         ['근태', 'calendar', 'c-cyan', 'ws/att'],
@@ -32,6 +32,49 @@
         ['로그아웃', 'logout', 'c-danger', 'act:logout'],
       ])}`;
   };
+  // ==================================================================
+  // 모바일 사원증 (전체 > 맨 위 프로필)
+  //  아래에서 화면 끝까지 올라오는 시트. 아래로 끌어내리거나 돌아가기 · 뒤로가기로 닫힘
+  //  시계가 1초마다 움직이고 안내 문구가 흘러가서 캡처한 화면이 아니라는 걸 보여줌
+  // ==================================================================
+  A.acts['id-card'] = () => {
+    const m = me();
+    const dept = m.role === 'ceo' ? '대표이사' : [m.team || '소속 없음', m.role === 'lead' ? '팀장' : m.position].filter(Boolean).join(' · ');
+    const since = m.joined_on ? m.joined_on.replace(/^(\d+)-(\d+)-(\d+)$/, '$1. $2. $3') : '';
+    const photo = m.av
+      ? `<img src="${esc(m.av)}" alt="">`
+      : `<span class="idv-noimg" style="--av:${A.avatarColor(m.name)}">${esc([...(m.name || '?')][0])}</span>`;
+    const notice = `<span>정상 발급된 모바일 사원증입니다.</span><span class="idv-mk"><img src="${A.BASE}/assets/icons/icon-192.png" alt="">CONAS</span>`;
+    let timer = null;
+    A.sheet.show(
+      '',
+      `<div class="idv">
+        <div class="idv-card">
+          <div class="idv-head">사원증</div>
+          <div class="idv-brand"><img src="${A.BASE}/assets/icons/icon-192.png" alt="">CONAS</div>
+          <div class="idv-photo">${photo}</div>
+          <b class="idv-name">${esc(m.name)}</b>
+          <p class="idv-dept">${esc(dept)}</p>
+          <p class="idv-no">${m.employee_no ? esc(m.employee_no) : '<span class="idv-none">사원번호 미등록</span>'}</p>
+          <div class="idv-ok"><p>위 사람은 당사 출입을 허용함</p>${since ? `<p class="idv-date">${since}</p>` : ''}</div>
+          <button class="idv-back" data-sheet-close>${ic('reply', 20, 2.2)}돌아가기</button>
+        </div>
+        <time class="idv-clock" id="idvClock"></time>
+        <div class="idv-marquee" aria-hidden="true"><div>${notice.repeat(3)}${notice.repeat(3)}</div></div>
+      </div>`,
+      { cls: 'sheet-idcard', swipe: true, onClose: () => clearInterval(timer) }
+    );
+    const tick = () => {
+      const el = A.$('#idvClock');
+      if (!el) return clearInterval(timer);
+      const d = new Date();
+      const h = d.getHours();
+      el.textContent = `${d.getFullYear()}.${A.pad(d.getMonth() + 1)}.${A.pad(d.getDate())} (${A.DOW[d.getDay()]}) ${h < 12 ? '오전' : '오후'} ${A.pad(h % 12 || 12)}시 ${A.pad(d.getMinutes())}분 ${A.pad(d.getSeconds())}초`;
+    };
+    tick();
+    timer = setInterval(tick, 1000);
+  };
+
   A.acts['theme-toggle'] = () => {
     A.theme.set(A.theme.get() === 'dark' ? 'light' : 'dark');
     A.refresh();
@@ -69,7 +112,7 @@
               .map(
                 (m) => `<div class="user-row">${A.avatar(m)}
             <div class="grow"><b class="t15">${esc(m.name)}</b> ${m.is_admin ? '<span class="tag leave">관리자</span>' : ''} ${m.role === 'ceo' ? '<span class="tag primary">대표</span>' : ''}
-              <span class="t13 muted ellipsis block">${esc(m.username)} · ${esc(m.email)}</span>
+              <span class="t13 muted ellipsis block">${m.employee_no ? `사번 ${esc(m.employee_no)} · ` : ''}${esc(m.username)} · ${esc(m.email)}</span>
               <span class="t13 muted block">가입 ${A.ago(m.created_ts)}${m.seen_ts ? ' · 최근 접속 ' + A.ago(m.seen_ts) : ''}</span></div>
             <button class="btn sm ghost" data-act="admin-member" data-id="${m.id}">관리</button></div>`
               )
@@ -92,11 +135,23 @@
     A.sheet.show(
       m.name,
       `<div class="person-h">${A.avatar(m)}<b>${esc(m.name)}</b><p>${esc(m.username)} · ${esc(m.email)}</p><span class="st ${ST[m.status][0]}">${ST[m.status][1]}</span></div>
+      <form data-form="admin-empno" data-id="${m.id}" class="empno-form">
+        <div class="field"><label>사원번호 <span class="t13 muted">모바일 사원증에 보여요</span></label>
+          <div class="row" style="gap:8px"><input name="employee_no" maxlength="20" value="${esc(m.employee_no || '')}" placeholder="예: CN-2024-001" autocomplete="off" class="grow"><button class="btn sm" type="submit">저장</button></div></div>
+      </form>
       ${acts || '<p class="t13 muted">바꿀 수 있는 항목이 없어요.</p>'}
-      ${m.status === 'pending' ? '<p class="t13 muted" style="margin-top:6px">승인하면 공개 채널에 자동으로 들어가요. 팀과 직책은 대표가 임직원 화면에서 정해요.</p>' : ''}`
+      ${m.status === 'pending' ? '<p class="t13 muted" style="margin-top:6px">승인해도 채널에는 자동으로 들어가지 않아요. 팀과 직책은 대표가 임직원 화면에서 정해요.</p>' : ''}`
     );
   };
   const ADMIN_MSG = { approve: '승인했어요', enable: '다시 이용할 수 있게 했어요', disable: '이용을 중지했어요', make_admin: '관리자로 지정했어요', revoke_admin: '관리자 권한을 해제했어요' };
+  A.forms['admin-empno'] = async (f, d) => {
+    const no = (d.employee_no || '').trim();
+    await A.post('admin.member', { user_id: Number(f.dataset.id), action: 'employee_no', employee_no: no });
+    A.sheet.close();
+    A.toast(no ? `사원번호를 ${no}(으)로 저장했어요` : '사원번호를 지웠어요');
+    await A.loadData();
+    A.refresh();
+  };
   A.acts['admin-do'] = async (el) => {
     const a = el.dataset.a;
     if (['disable', 'revoke_admin'].includes(a) && !(await A.ask({ title: '확인', body: a === 'disable' ? '이 회원이 더 이상 로그인할 수 없게 돼요. 계속할까요?' : '관리자 권한을 해제할까요?', ok: '계속', danger: true }))) return;

@@ -23,13 +23,26 @@
     B.posts = d.posts;
     B.hasMore = d.has_more;
     drawBoard(main);
-    if (d.board.can_write) A.$('#fab').innerHTML = `<button class="fab" data-go="cm/write/${B.board}">${ic('pen', 18, 2.2)}글쓰기</button>`;
+    setFab();
   };
 
+  /** 글쓰기 버튼: 이미 있으면 그대로 두고 주소만 바꿈 (게시판을 옮겨도 다시 그려지지 않게) */
+  function setFab() {
+    const fab = A.$('#fab');
+    if (!B.info.can_write) {
+      fab.innerHTML = '';
+      return;
+    }
+    const btn = fab.querySelector('.fab');
+    if (btn) btn.dataset.go = `cm/write/${B.board}`;
+    else fab.innerHTML = `<button class="fab" data-go="cm/write/${B.board}">${ic('pen', 18, 2.2)}글쓰기</button>`;
+  }
+
+  /** 목록에는 제목만 (내용 미리보기 없음) */
   function postRow(p) {
     return `<button class="post" data-go="cm/post/${p.id}"><div class="post-in"><div class="grow">
       ${p.pinned ? '<span class="tag primary">고정</span>' : ''}
-      <h4>${esc(p.title)}</h4><p class="ellipsis">${esc(p.preview)}</p>
+      <h4>${esc(p.title)}</h4>
       <div class="meta"><span>${esc(p.author)} · ${A.ago(p.ts)}</span>
         <span class="lk ${p.likes >= 10 ? 'hot' : ''}">${ic('heart', 13, 2.2)}${p.likes}</span>
         <span class="lk">${ic('comment', 13, 2.2)}${p.comments}</span>
@@ -37,17 +50,56 @@
       </div></div>${p.thumb ? `<img class="thumb" src="${esc(p.thumb)}" alt="" loading="lazy">` : ''}</div></button>`;
   }
 
+  // 화면 틀(제목 · 게시판 버튼)은 처음 한 번만 그리고, 게시판을 옮기면 목록(#boardBody)만 바꿈
   function drawBoard(main) {
-    const b = B.info;
     main.innerHTML = `
-      <div class="page-h"><div><h2>게시판</h2><p>${esc(b.description || '')}</p></div></div>
-      <div class="chips">${A.data.boards.map((x) => `<button class="chip ${x.id === B.board ? 'on' : ''}" data-go="cm/board/${x.id}">${esc(x.name)}</button>`).join('')}</div>
-      ${b.anonymous ? `<p class="board-note">${ic('eye', 15)}익명 게시판이에요. 글과 댓글에 이름이 보이지 않아요.</p>` : ''}
+      <div class="page-h"><div><h2>게시판</h2><p id="boardDesc">${esc(B.info.description || '')}</p></div></div>
+      <div class="chips" id="boardTabs">${A.data.boards.map((x) => `<button class="chip ${x.id === B.board ? 'on' : ''}" data-act="board-tab" data-id="${x.id}">${esc(x.name)}</button>`).join('')}</div>
+      <div id="boardBody">${boardBody()}</div>`;
+  }
+  function boardBody() {
+    return `${B.info.anonymous ? `<p class="board-note">${ic('eye', 15)}익명 게시판이에요. 글과 댓글에 이름이 보이지 않아요.</p>` : ''}
       <section class="card">
         ${B.posts.map(postRow).join('') || '<div class="empty">아직 글이 없어요. 첫 글을 써보세요!</div>'}
         ${B.hasMore ? '<button class="done-toggle" data-act="posts-more">더 보기</button>' : ''}
       </section>`;
   }
+
+  // 게시판 버튼: 주소만 바꾸고(기록은 남기지 않음) 목록만 새로 불러옴
+  let tabSeq = 0;
+  A.acts['board-tab'] = async (el) => {
+    const id = Number(el.dataset.id);
+    if (id === B.board) return;
+    const seq = ++tabSeq;
+    const prev = B.board;
+    const pick = (bid) => {
+      B.board = bid;
+      A.$$('#boardTabs .chip').forEach((c) => c.classList.toggle('on', Number(c.dataset.id) === bid));
+      history.replaceState(null, '', '#/cm/board/' + bid);
+      if (A.route) A.route.id = bid;
+    };
+    pick(id);
+    const body = A.$('#boardBody');
+    body.classList.add('dim');
+    let d;
+    try {
+      d = await A.api('posts', { board_id: id });
+    } catch (e) {
+      if (seq === tabSeq && A.isCurrent('cm-board')) pick(prev); // 못 불러오면 원래 게시판으로
+      throw e;
+    } finally {
+      if (seq === tabSeq) body.classList.remove('dim');
+    }
+    if (seq !== tabSeq || !A.isCurrent('cm-board')) return;
+    B.info = d.board;
+    B.posts = d.posts;
+    B.hasMore = d.has_more;
+    A.$('#boardDesc').textContent = d.board.description || '';
+    body.innerHTML = boardBody();
+    setFab();
+    A.$('#view').scrollTop = 0;
+  };
+
   A.acts['posts-more'] = async (el) => {
     el.disabled = true;
     const d = await A.api('posts', { board_id: B.board, before: B.posts[B.posts.length - 1].id });
@@ -55,7 +107,7 @@
     B.hasMore = d.has_more;
     const main = A.$('#view');
     const s = main.scrollTop;
-    drawBoard(main);
+    A.$('#boardBody').innerHTML = boardBody();
     main.scrollTop = s;
   };
 
@@ -502,7 +554,31 @@
   // ==================================================================
   // 대화방 (채널 · DM 공용)
   // ==================================================================
-  const CH = { info: null, msgs: [], reads: {}, since: 0, hasMore: false, timer: null, pending: new Map() };
+  const CH = { info: null, msgs: [], reads: {}, since: 0, changed: 0, hasMore: false, timer: null, pending: new Map() };
+
+  /** 메시지 반응 (서버 MSG_REACTIONS 와 같은 순서) */
+  const REACT = [
+    ['heart', '❤️', '좋아요'],
+    ['like', '👍', '최고예요'],
+    ['check', '✅', '확인했어요'],
+    ['laugh', '😆', '웃겨요'],
+    ['wow', '😮', '놀라워요'],
+    ['sad', '😥', '슬퍼요'],
+  ];
+  const REACT_EMOJI = Object.fromEntries(REACT.map(([k, e]) => [k, e]));
+  /** 반응 중 내가 누른 것 */
+  const myRx = (m) => Object.keys(m.rx || {}).find((k) => (m.rx[k] || []).includes(me().id)) || null;
+  /** 반응 누르기: 같은 걸 누르면 취소, 다른 걸 누르면 바꿈 (한 사람당 하나) */
+  function toggleRx(rx, key, uid) {
+    const out = {};
+    const had = (rx[key] || []).includes(uid);
+    for (const k in rx) {
+      const list = (rx[k] || []).filter((x) => x !== uid);
+      if (list.length) out[k] = list;
+    }
+    if (!had) out[key] = (out[key] || []).concat(uid);
+    return out;
+  }
 
   function chatHead(info) {
     if (info.type === 'channel') {
@@ -549,8 +625,10 @@
     CH.msgs = d.messages;
     CH.reads = d.reads || {};
     CH.since = d.since || 0;
+    CH.changed = d.now || Math.floor(Date.now() / 1000);
     CH.hasMore = d.has_more;
     drawMsgs(true);
+    bindMsgPress(A.$('#msgs'));
     markRead();
     const form = A.$('form[data-form="chat-send"]');
     const ta = A.$('textarea', form);
@@ -564,9 +642,24 @@
       if (!A.isCurrent('chat') || A.route.id !== c) return;
       if (!document.hidden) {
         try {
-          const p = await A.legacy('poll.php', { since: CH.since, c, active: 1 });
+          const p = await A.legacy('poll.php', { since: CH.since, c, active: 1, changed: CH.changed });
           if (!A.isCurrent('chat') || A.route.id !== c) return;
           let changed = false;
+          // 다른 사람이 누른 반응 · 삭제한 메시지 반영
+          if (p.now) CH.changed = p.now - 1; // 같은 초에 바뀐 것을 놓치지 않게 1초 겹쳐서 확인
+          if (p.changed && p.changed.length) {
+            let diff = false;
+            for (const nm of p.changed) {
+              const i = CH.msgs.findIndex((x) => x.id === nm.id);
+              if (i < 0) continue;
+              const om = CH.msgs[i];
+              if (om.deleted !== nm.deleted || JSON.stringify(om.rx || {}) !== JSON.stringify(nm.rx || {})) {
+                CH.msgs[i] = { ...om, ...nm };
+                diff = true;
+              }
+            }
+            if (diff) redrawKeep();
+          }
           if (p.messages && p.messages.length) {
             CH.since = Math.max(CH.since, ...p.messages.map((m) => m.id));
             const mine = p.messages.filter((m) => m.c === c && !CH.msgs.some((x) => x.id === m.id) && !(m.cid && CH.pending.has(m.cid)));
@@ -676,7 +769,10 @@
       const showTime = !(next && !next.sys && next.uid === m.uid && sameDay(next) && A.hm(next.ts) === A.hm(m.ts));
       const mine = m.uid === me().id;
       const files = (m.files || []).map(fileHtml).join('');
-      const body = `${m.body ? `<div class="bubble msg-body">${A.linkify(m.body)}</div>` : ''}${files}`;
+      const rx = m.deleted ? '' : rxHtml(m);
+      const body = m.deleted
+        ? `<div class="bubble msg-del">${ic('x', 14, 2.4)}삭제된 메시지예요</div>`
+        : `${m.body ? `<div class="bubble msg-body">${A.linkify(m.body)}</div>` : ''}${files}${rx}`;
       const n = unreadOf(m);
       const side = `<span class="msg-side"><span class="rc">${n || ''}</span>${m.sending ? '<span class="time">보내는 중</span>' : showTime ? `<span class="time">${A.hm(m.ts)}</span>` : ''}</span>`;
       const row = `<div class="bubble-row"><div class="bubble-stack">${body}</div>${side}</div>`;
@@ -695,6 +791,148 @@
     box.innerHTML = html;
     if (toBottom) box.scrollTop = box.scrollHeight;
   }
+
+  /** 말풍선 아래 반응 (❤️ 2  😥 1). 누르면 나도 같은 반응 / 다시 누르면 취소 */
+  function rxHtml(m) {
+    const rx = m.rx || {};
+    const mine = myRx(m);
+    const pills = REACT.filter(([k]) => (rx[k] || []).length)
+      .map(([k, e]) => `<button type="button" class="rx-pill ${mine === k ? 'on' : ''}" data-act="msg-rx" data-mid="${m.id}" data-r="${k}">${e}<b>${rx[k].length}</b></button>`)
+      .join('');
+    return pills ? `<div class="rx-row">${pills}</div>` : '';
+  }
+
+  /** 다시 그리되 보던 위치는 그대로 (맨 아래를 보고 있었으면 맨 아래로) */
+  function redrawKeep() {
+    const box = A.$('#msgs');
+    if (!box) return;
+    const bottom = nearBottom();
+    const st = box.scrollTop;
+    drawMsgs(false);
+    box.scrollTop = bottom ? box.scrollHeight : st;
+  }
+
+  /**
+   * 메시지 길게 누르기(휴대폰) · 오른쪽 클릭(컴퓨터) → 반응 · 복사 · 삭제 메뉴
+   */
+  function bindMsgPress(box) {
+    if (!box) return;
+    let timer = null;
+    let sx = 0;
+    let sy = 0;
+    let fired = false;
+    let lastOpen = 0;
+    const hit = (e) => {
+      const row = e.target.closest('[data-mid]');
+      if (!row || !e.target.closest('.bubble, .imgs, .file-row')) return null;
+      return Number(row.dataset.mid);
+    };
+    const open = (id) => {
+      if (Date.now() - lastOpen < 700) return;
+      lastOpen = Date.now();
+      openMsgMenu(id);
+    };
+    box.addEventListener(
+      'touchstart',
+      (e) => {
+        const id = hit(e);
+        fired = false;
+        if (!id) return;
+        sx = e.touches[0].clientX;
+        sy = e.touches[0].clientY;
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          fired = true;
+          if (navigator.vibrate) navigator.vibrate(12);
+          open(id);
+        }, 450);
+      },
+      { passive: true }
+    );
+    box.addEventListener(
+      'touchmove',
+      (e) => {
+        if (timer && (Math.abs(e.touches[0].clientX - sx) > 10 || Math.abs(e.touches[0].clientY - sy) > 10)) {
+          clearTimeout(timer);
+          timer = null;
+        }
+      },
+      { passive: true }
+    );
+    box.addEventListener('touchend', (e) => {
+      clearTimeout(timer);
+      timer = null;
+      if (fired && e.cancelable) e.preventDefault(); // 길게 누른 뒤 손을 떼도 사진 열기 등이 눌리지 않게
+    });
+    box.addEventListener('contextmenu', (e) => {
+      const id = hit(e);
+      if (!id) return;
+      e.preventDefault();
+      open(id);
+    });
+  }
+
+  function openMsgMenu(id) {
+    const m = CH.msgs.find((x) => x.id === id);
+    if (!m || m.id <= 0 || m.sys || m.deleted) return;
+    const mine = myRx(m);
+    const who = REACT.filter(([k]) => (m.rx && m.rx[k] || []).length)
+      .map(([k, e]) => `<p class="rx-who"><span>${e}</span>${esc(m.rx[k].map((uid) => (uid === me().id ? '나' : (A.mem(uid) || {}).name || '(알 수 없음)')).join(', '))}</p>`)
+      .join('');
+    A.sheet.show(
+      '',
+      `<div class="rx-bar">${REACT.map(([k, e, label]) => `<button type="button" class="${mine === k ? 'on' : ''}" data-act="msg-rx" data-mid="${m.id}" data-r="${k}" aria-label="${label}">${e}</button>`).join('')}</div>
+      ${who ? `<div class="rx-whos">${who}</div>` : ''}
+      <div class="msg-menu">
+        ${m.body ? `<button class="menu-row" data-act="msg-copy" data-mid="${m.id}">${ic('file', 18)}<span class="grow">복사</span></button>` : ''}
+        ${m.uid === me().id ? `<button class="menu-row danger-row" data-act="msg-del" data-mid="${m.id}">${ic('trash', 18)}<span class="grow">삭제</span></button>` : ''}
+      </div>`
+    );
+  }
+
+  A.acts['msg-rx'] = async (el) => {
+    const id = Number(el.dataset.mid);
+    const key = el.dataset.r;
+    const m = CH.msgs.find((x) => x.id === id);
+    if (!m || m.deleted) return;
+    if (A.sheet.open) A.sheet.close();
+    const before = m.rx || {};
+    m.rx = toggleRx(before, key, me().id); // 먼저 화면에 반영
+    redrawKeep();
+    try {
+      const r = await A.post('msg.react', { id, reaction: key });
+      m.rx = r.rx || {};
+    } catch (e) {
+      m.rx = before;
+      A.err(e);
+    }
+    if (A.isCurrent('chat')) redrawKeep();
+  };
+  A.acts['msg-copy'] = async (el) => {
+    const m = CH.msgs.find((x) => x.id === Number(el.dataset.mid));
+    A.sheet.close();
+    if (!m) return;
+    try {
+      await navigator.clipboard.writeText(m.body);
+    } catch (e) {
+      const t = document.createElement('textarea');
+      t.value = m.body;
+      document.body.appendChild(t);
+      t.select();
+      document.execCommand('copy');
+      t.remove();
+    }
+    A.toast('복사했어요');
+  };
+  A.acts['msg-del'] = async (el) => {
+    const id = Number(el.dataset.mid);
+    if (!(await A.ask({ title: '메시지 삭제', body: '이 메시지를 삭제할까요?\n대화 상대 모두에게 "삭제된 메시지예요"로 보여요.', ok: '삭제', danger: true }))) return;
+    await A.post('msg.delete', { id });
+    const m = CH.msgs.find((x) => x.id === id);
+    if (m) Object.assign(m, { deleted: true, body: '', files: [], rx: {} });
+    if (A.isCurrent('chat')) redrawKeep();
+    A.toast('메시지를 삭제했어요');
+  };
 
   A.acts['chat-more'] = async (el) => {
     el.disabled = true;
@@ -766,7 +1004,14 @@
   A.acts['chat-info'] = () => {
     const c = CH.info;
     const title = c.type === 'channel' ? '#' + c.title : c.type === 'dm' ? '대화 정보' : c.title;
-    const memRow = (m) => `<button class="list-item" data-act="person" data-id="${m.id}">${A.avatar(m)}<span class="grow"><b class="t15">${esc(m.name)}</b>${m.id === me().id ? ' <span class="tag">나</span>' : ''}<span class="t13 muted block">${esc(m.gone ? '퇴사 · 정지된 계정' : A.roleLabel(m))}</span></span>${ic('chevR', 18)}</button>`;
+    const kickable = (m) => c.can_kick && m.id !== me().id;
+    const memRow = (m) => {
+      const row = `<button class="list-item" data-act="person" data-id="${m.id}">${A.avatar(m)}<span class="grow"><b class="t15">${esc(m.name)}</b>${m.id === me().id ? ' <span class="tag">나</span>' : ''}<span class="t13 muted block">${esc(m.gone ? '퇴사 · 정지된 계정' : A.roleLabel(m))}</span></span>${kickable(m) ? '' : ic('chevR', 18)}</button>`;
+      // 관리자: 채널 참여자 옆에 내보내기 버튼
+      return kickable(m)
+        ? `<div class="mem-line">${row}<button class="btn sm danger" data-act="chan-kick" data-id="${m.id}">내보내기</button></div>`
+        : row;
+    };
     const people = c.type === 'dm' && c.other && c.other.left ? c.members.concat([c.other]) : c.members;
     A.sheet.show(
       title,
@@ -780,6 +1025,20 @@
         ${c.joined ? `<button class="btn danger" data-act="chat-leave">${ic('logout', 18)}나가기</button>` : ''}
       </div>`
     );
+  };
+  A.acts['chan-kick'] = async (el) => {
+    const id = Number(el.dataset.id);
+    const m = CH.info.members.find((x) => x.id === id);
+    const name = m ? m.name : '이 사람';
+    if (!(await A.ask({ title: '내보내기', body: `${name}님을 #${CH.info.title} 채널에서 내보낼까요?\n본인이 원하면 다시 참여할 수 있어요.`, ok: '내보내기', danger: true }))) return;
+    try {
+      await A.post('chat.kick', { c: CH.info.id, user_id: id });
+    } catch (e) {
+      return A.err(e);
+    }
+    A.toast(`${name}님을 내보냈어요`);
+    await refreshInfo();
+    A.acts['chat-info']();
   };
   A.acts['chat-invite'] = () => openPicker('invite');
   A.acts['chat-rename'] = () => {
@@ -827,9 +1086,18 @@
       ${m.role !== 'member' ? `<span class="tag primary">${A.ROLE[m.role]}</span>` : ''}
     </button>`;
   }
+  /**
+   * 임직원 화면에 보일 사람
+   *  팀에 배정되지 않은 사람(대표 제외)은 대표 · 관리자에게만 보임. 본인은 항상 보임
+   */
+  function peopleVisible() {
+    const all = A.data.members;
+    if (me().can_manage) return all;
+    return all.filter((m) => m.role === 'ceo' || m.team_id || m.id === me().id);
+  }
   function peopleRes() {
     const q = PP.q.trim().toLowerCase();
-    const all = A.data.members;
+    const all = peopleVisible();
     if (q) {
       const r = all.filter((m) => [m.name, m.team, A.ROLE[m.role], m.position, m.email, m.phone, m.username].join(' ').toLowerCase().includes(q));
       return `<section class="card"><div class="card-h"><h3>검색 결과</h3><span class="t13 muted">${r.length}명</span></div>${r.map(personRow).join('') || '<div class="empty">찾는 사람이 없어요</div>'}</section>`;
@@ -849,7 +1117,7 @@
   }
   function drawPeople(main) {
     main.innerHTML = `
-      <div class="page-h"><div><h2>임직원</h2><p>CONAS · ${A.data.members.length}명${A.isCeo() ? ' · 직원을 누르면 직책을 바꿀 수 있어요' : ''}</p></div>
+      <div class="page-h"><div><h2>임직원</h2><p>CONAS · ${peopleVisible().length}명${A.isCeo() ? ' · 직원을 누르면 직책을 바꿀 수 있어요' : ''}</p></div>
         ${A.isCeo() ? `<button class="new-btn" data-act="teams">${ic('settings', 16)}팀 관리</button>` : ''}</div>
       <label class="search">${ic('search', 20)}<input id="peopleQ" placeholder="이름, 팀, 직책, 연락처로 검색" value="${esc(PP.q)}" autocomplete="off">
         <button type="button" class="search-x" id="peopleX" ${PP.q ? '' : 'hidden'} aria-label="지우기">${ic('x', 16, 2.4)}</button></label>

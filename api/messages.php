@@ -45,6 +45,8 @@ if ($before <= 0) {
 }
 
 $out['messages'] = array_reverse($msgs);
+// 반응 · 삭제 확인 기준 시각 (poll.php 의 changed 에 넘겨줌)
+$out['now'] = time();
 $out['has_more'] = count($msgs) === PAGE;
 
 json_out($out);

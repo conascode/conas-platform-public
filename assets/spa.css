@@ -128,6 +128,9 @@ main.chat { background: var(--chat-bg); }
 .grow { flex: 1; min-width: 0; }
 .list-item { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); width: 100%; text-align: left; }
 .list-item:first-child { border-top: 0; padding-top: 2px; }
+.mem-line { display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--line); }
+.mem-line > .list-item { border-top: 0; padding: 12px 0; flex: 1; min-width: 0; }
+.mem-line > .btn { flex: none; height: 32px; padding: 0 12px; font-size: 13px; }
 .ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .t15 { font-size: 15px; font-weight: 600; }
 .t13 { font-size: 13px; }
@@ -410,6 +413,33 @@ main.chat { background: var(--chat-bg); }
 .profile .avatar { width: 58px; height: 58px; font-size: 22px; }
 .profile b { font-size: 19px; font-weight: 800; }
 .profile p { font-size: 14px; color: var(--sub); margin-top: 2px; }
+.idc-open { display: inline-flex; align-items: center; gap: 4px; height: 30px; padding: 0 10px; border-radius: 15px; background: var(--primary-soft); color: var(--primary); font-size: 13px; font-weight: 700; flex: none; }
+/* 모바일 사원증 (#/idcard) */
+.idv > :first-child { margin-top: auto; }
+.idv > :last-child { margin-bottom: auto; }
+.idv { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 4px 18px calc(16px + env(safe-area-inset-bottom)); }
+.idv-card { width: 100%; max-width: 400px; background: var(--surface); border-radius: 26px; overflow: hidden; box-shadow: 0 10px 30px rgba(25,31,40,.08); text-align: center; padding-bottom: 26px; }
+.idv-head { height: 58px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 21px; font-weight: 800; letter-spacing: .04em; background: linear-gradient(90deg, var(--primary), #1098ad); }
+.idv-brand { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 28px 0 22px; font-size: 30px; font-weight: 900; letter-spacing: -.01em; color: var(--primary); }
+.idv-brand img { width: 38px; height: 38px; }
+.idv-photo { width: 132px; height: 170px; margin: 0 auto; border-radius: 10px; overflow: hidden; background: var(--surface-2); box-shadow: 0 0 0 1px var(--line); }
+.idv-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.idv-noimg { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; background: var(--av); color: #fff; font-size: 58px; font-weight: 800; }
+.idv-name { display: block; margin-top: 22px; font-size: 30px; font-weight: 900; letter-spacing: .02em; color: var(--primary); }
+.idv-dept { margin-top: 8px; font-size: 17px; color: var(--ink-2); }
+.idv-no { margin-top: 4px; font-size: 17px; color: var(--ink-2); letter-spacing: .04em; font-variant-numeric: tabular-nums; }
+.idv-ok { margin: 28px 24px 0; font-size: 16px; color: var(--ink-2); line-height: 1.6; }
+.idv-none { color: var(--faint); font-size: 15px; letter-spacing: 0; }
+.idv-date { font-variant-numeric: tabular-nums; }
+.idv-back { display: inline-flex; align-items: center; gap: 10px; margin-top: 28px; height: 52px; padding: 0 34px; border-radius: 26px; background: var(--primary-soft); color: var(--primary); font-size: 17px; font-weight: 800; }
+.idv-clock { margin-top: 22px; font-size: 20px; font-weight: 700; color: var(--primary); font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.idv-marquee { width: calc(100% + 36px); flex: none; margin-top: 10px; overflow: hidden; background: var(--primary-soft); color: var(--primary); font-size: 15px; font-weight: 600; }
+.idv-marquee > div { display: flex; width: max-content; animation: idvRoll 18s linear infinite; }
+.idv-marquee span { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; white-space: nowrap; }
+.idv-mk { font-weight: 900; }
+.idv-mk img { width: 18px; height: 18px; }
+@keyframes idvRoll { to { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) { .idv-marquee > div { animation-duration: 60s; } }
 .menu-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 0; border-top: 1px solid var(--line); font-size: 15px; font-weight: 600; text-align: left; }
 .menu-row:first-child { border-top: 0; padding-top: 4px; }
 .menu-row .grow { flex: 1; }
@@ -442,6 +472,8 @@ main.chat { background: var(--chat-bg); }
 .meta .lk { display: flex; align-items: center; gap: 3px; }
 .meta .lk.hot { color: var(--danger); }
 .board-note { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--sub); margin: -4px 2px 12px; }
+#boardBody { transition: opacity .15s; }
+#boardBody.dim { opacity: .45; pointer-events: none; }
 .chan-ic { width: 40px; height: 40px; border-radius: 12px; background: var(--surface-2); display: grid; place-items: center; color: var(--ink-2); flex: none; }
 .sub-h {
   flex: none; min-height: 56px; display: flex; align-items: center; gap: 6px; padding: 0 8px 0 6px;
@@ -573,6 +605,25 @@ main.chat { animation: chatIn .32s cubic-bezier(.2,.7,.2,1); }
 .msg.me .msg-side { align-items: flex-end; }
 .msg.me .bubble { background: var(--primary); color: #fff; }
 .msg.me:not(.cont) .bubble-stack > :first-child.bubble { border-top-right-radius: 5px; }
+/* 메시지 반응 · 삭제 */
+.rx-row { display: flex; flex-wrap: wrap; gap: 4px; }
+.msg.me .rx-row { justify-content: flex-end; }
+.rx-pill { display: inline-flex; align-items: center; gap: 3px; height: 26px; padding: 0 9px 0 7px; border-radius: 13px; background: var(--surface); border: 1px solid var(--line); font-size: 14px; line-height: 1; box-shadow: 0 1px 1px rgba(0,0,0,.04); }
+.rx-pill b { font-size: 12px; font-weight: 700; color: var(--ink-2); }
+.rx-pill.on { background: var(--primary-soft); border-color: var(--primary); }
+.rx-pill.on b { color: var(--primary); }
+.bubble.msg-del { display: inline-flex; align-items: center; gap: 5px; color: var(--sub); background: var(--surface); border: 1px dashed var(--line-2); box-shadow: none; font-size: 14px; }
+.msg.me .bubble.msg-del { background: var(--surface); color: var(--sub); }
+.rx-bar { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; padding: 4px 0 10px; }
+.rx-bar button { aspect-ratio: 1; max-width: 52px; justify-self: center; width: 100%; border-radius: 50%; font-size: 27px; line-height: 1; display: flex; align-items: center; justify-content: center; background: var(--surface-2); transition: transform .15s var(--spring); }
+.rx-bar button:active { transform: scale(1.25); }
+.rx-bar button.on { background: var(--primary-soft); box-shadow: 0 0 0 2px var(--primary); }
+.rx-whos { padding: 2px 2px 8px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.rx-who { display: flex; gap: 8px; align-items: baseline; font-size: 13px; color: var(--sub); padding: 3px 0; }
+.rx-who span { font-size: 16px; }
+.msg-menu .menu-row:first-child { padding-top: 14px; }
+.menu-row.danger-row { color: var(--danger); }
+@media (pointer: coarse) { .msgs .bubble, .msgs .imgs { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; } }
 .msg.me .bubble a { color: #fff; }
 .msg .imgs { display: block; border-radius: 14px; overflow: hidden; background: var(--surface-2); cursor: zoom-in; }
 .msg .imgs img { max-width: min(240px, 60vw); max-height: 280px; display: block; transition: transform .2s; }
@@ -684,6 +735,15 @@ main.chat { animation: chatIn .32s cubic-bezier(.2,.7,.2,1); }
 .sheet-body { overflow-y: auto; padding: 8px 20px calc(24px + env(safe-area-inset-bottom)); overscroll-behavior: contain; }
 .sheet-body .composer { margin: 12px -20px calc(-24px - env(safe-area-inset-bottom)); }
 @keyframes up { from { transform: translateY(100%); } to { transform: none; } }
+/* 끌어내려 닫는 시트: 위쪽 손잡이 */
+.sheet-grab { display: none; }
+.sheet-wrap.swipe .sheet-grab { display: block; flex: none; width: 40px; height: 5px; border-radius: 3px; background: var(--line-2); margin: 8px auto 2px; }
+.sheet-wrap.swipe .sheet { touch-action: pan-y; }
+/* 모바일 사원증: 화면 끝까지 올라오는 시트 */
+.sheet-wrap.sheet-idcard .sheet { height: calc(100% - 10px); max-height: none; background: var(--surface-2); overflow: hidden; animation-duration: .38s; }
+.sheet-wrap.sheet-idcard .sheet-head { display: none; }
+.sheet-wrap.swipe .sheet-grab, .sheet-wrap.sheet-idcard .idv { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.sheet-wrap.sheet-idcard .sheet-body { flex: 1; display: flex; flex-direction: column; padding: 0; overflow-x: hidden; }
 @keyframes down { to { transform: translateY(100%); } }
 @keyframes fade { from { opacity: 0; } }
 .toast {

@@ -11,6 +11,7 @@ function api_bootstrap(array $me, array $in): array
 
     return [
         'me' => member_public($me) + [
+            'employee_no' => $me['employee_no'],
             'annual_leave' => $me['annual_leave'] === null ? null : (float)$me['annual_leave'],
             'can_manage' => can_manage_company($me),
             'assignable' => assignable_ids($me),

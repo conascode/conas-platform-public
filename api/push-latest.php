@@ -13,7 +13,7 @@ $m = q(
        JOIN in_conversation_members cm ON cm.conversation_id = m.conversation_id AND cm.user_id = ?
        LEFT JOIN users u ON u.id = m.user_id
        LEFT JOIN in_members mm ON mm.user_id = m.user_id
-      WHERE m.id > cm.last_read_message_id AND (m.user_id IS NULL OR m.user_id <> ?)
+      WHERE m.id > cm.last_read_message_id AND m.deleted_at IS NULL AND (m.user_id IS NULL OR m.user_id <> ?)
       ORDER BY m.id DESC
       LIMIT 1',
     [$u['id'], $u['id']]

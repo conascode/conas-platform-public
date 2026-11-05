@@ -68,6 +68,7 @@ function chat_fetch_messages(string $where, array $params, string $order = 'ASC'
     $order = $order === 'DESC' ? 'DESC' : 'ASC';
     $rows = q(
         "SELECT m.id, m.conversation_id, m.user_id, m.body, m.client_msg_id, UNIX_TIMESTAMP(m.created_at) AS ts,
+                m.deleted_at IS NOT NULL AS deleted,
                 u.username, mm.display_name, mm.avatar
            FROM in_messages m
            LEFT JOIN users u ON u.id = m.user_id
@@ -78,24 +79,62 @@ function chat_fetch_messages(string $where, array $params, string $order = 'ASC'
         $params
     )->fetchAll();
 
-    $atts = att_for_messages(array_map(fn($r) => (int)$r['id'], $rows));
+    $ids = array_map(fn($r) => (int)$r['id'], $rows);
+    $atts = att_for_messages($ids);
+    $rx = chat_reactions($ids);
     $out = [];
     foreach ($rows as $r) {
         $id = (int)$r['id'];
+        $del = (bool)$r['deleted'];
         $out[] = [
             'id' => $id,
             'c' => (int)$r['conversation_id'],
             'uid' => $r['user_id'] === null ? null : (int)$r['user_id'],
             'name' => user_label($r),
             'av' => $r['user_id'] === null ? null : avatar_url((int)$r['user_id'], $r['avatar']),
-            'body' => $r['body'],
+            // 삭제된 메시지는 내용 · 파일 · 반응을 보내지 않음 (DB에는 남아 있음)
+            'body' => $del ? '' : $r['body'],
             'cid' => $r['client_msg_id'],
             'ts' => (int)$r['ts'],
-            'files' => $atts[$id] ?? [],
+            'files' => $del ? [] : ($atts[$id] ?? []),
             'sys' => str_starts_with((string)$r['client_msg_id'], 'sys:'),
+            'deleted' => $del,
+            'rx' => $del ? (object)[] : (object)($rx[$id] ?? []),
         ];
     }
     return $out;
+}
+
+/** 메시지 반응 종류 (화면의 이모지와 짝: heart ❤️, like 👍, check ✅, laugh 😆, wow 😮, sad 😥) */
+const MSG_REACTIONS = ['heart', 'like', 'check', 'laugh', 'wow', 'sad'];
+
+/** 메시지 id => [반응 => [누른 사람 id, ...]] */
+function chat_reactions(array $msgIds): array
+{
+    if (!$msgIds) return [];
+    $out = [];
+    $rows = q(
+        'SELECT message_id, user_id, reaction FROM in_message_reactions WHERE message_id IN (' . in_list($msgIds) . ') ORDER BY created_at, user_id',
+        array_values($msgIds)
+    );
+    foreach ($rows as $r) {
+        $out[(int)$r['message_id']][$r['reaction']][] = (int)$r['user_id'];
+    }
+    return $out;
+}
+
+/** 내가 볼 수 있는 메시지면 정보, 아니면 null (DM · 그룹은 들어온 뒤의 메시지만) */
+function chat_message_for(int $msgId, int $userId): ?array
+{
+    $m = q(
+        "SELECT m.id, m.conversation_id, m.user_id, m.client_msg_id, m.deleted_at
+           FROM in_messages m
+           JOIN in_conversation_members cm ON cm.conversation_id = m.conversation_id AND cm.user_id = ?
+           JOIN in_conversations c ON c.id = m.conversation_id
+          WHERE m.id = ? AND (c.type = 'channel' OR m.created_at >= cm.joined_at)",
+        [$userId, $msgId]
+    )->fetch();
+    return $m ?: null;
 }
 
 /**

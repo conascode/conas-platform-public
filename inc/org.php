@@ -36,7 +36,7 @@ function org_members(bool $refresh = false): array
         return $cache;
     }
     $rows = q(
-        "SELECT u.id, u.username, u.email, m.display_name, m.avatar, m.phone, m.team_id, t.name AS team_name,
+        "SELECT u.id, u.username, u.email, m.display_name, m.employee_no, m.avatar, m.phone, m.team_id, t.name AS team_name,
                 m.role, m.position, m.joined_on, m.annual_leave, m.is_admin, m.status,
                 (m.last_seen_at >= NOW() - INTERVAL 3 MINUTE) AS online
            FROM in_members m

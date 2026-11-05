@@ -4,6 +4,7 @@
  *  since  : 마지막으로 받은 메시지 id (있으면 그 이후 새 메시지를 돌려줌)
  *  c      : 지금 보고 있는 채팅방 id (있으면 읽음 정보를 돌려줌)
  *  active : 1이면 채팅 화면을 보고 있음 (이때는 푸시 알림을 보내지 않음)
+ *  changed: (c와 함께) 이 시각(유닉스 초) 이후 반응 · 삭제가 바뀐 메시지를 돌려줌
  */
 define('IS_API', true);
 require __DIR__ . '/../inc/bootstrap.php';
@@ -38,7 +39,17 @@ if (isset($_GET['since'])) {
 }
 
 $c = (int)($_GET['c'] ?? 0);
-if ($c > 0 && chat_conversation($c, $u['id'])) {
+if ($c > 0 && ($conv = chat_conversation($c, $u['id']))) {
+    if (isset($_GET['changed'])) {
+        $where = 'm.conversation_id = ? AND m.changed_at >= FROM_UNIXTIME(?)';
+        $params = [$c, max(0, (int)$_GET['changed'])];
+        if ($conv['type'] !== 'channel') {
+            $where .= ' AND m.created_at >= ?';
+            $params[] = $conv['joined_at'];
+        }
+        $out['changed'] = chat_fetch_messages($where, $params, 'ASC', 200);
+        $out['now'] = time();
+    }
     $reads = [];
     foreach (q('SELECT user_id, last_read_message_id FROM in_conversation_members WHERE conversation_id = ?', [$c]) as $r) {
         $reads[(int)$r['user_id']] = (int)$r['last_read_message_id'];

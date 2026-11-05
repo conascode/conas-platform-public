@@ -142,11 +142,13 @@
   // 사람
   // ==================================================================
   const AV_COLORS = ['#2f5bea', '#7b3ff2', '#0ca678', '#f08c00', '#e64980', '#1098ad', '#495057'];
+  /** 이름으로 정해지는 프로필 기본 색 */
+  A.avatarColor = (name) => AV_COLORS[[...(name || '?')].reduce((a, c) => a + c.charCodeAt(0), 0) % AV_COLORS.length];
   /** m: {name, av?, online?} / anon: true 면 익명 */
   A.avatar = (m, cls = '') => {
     if (!m || m.anon) return `<span class="avatar anon ${cls}" aria-hidden="true">${A.ic('user', 18)}</span>`;
     const name = m.name || '?';
-    const color = AV_COLORS[[...name].reduce((a, c) => a + c.charCodeAt(0), 0) % AV_COLORS.length];
+    const color = A.avatarColor(name);
     const on = m.online ? ' on' : '';
     if (m.av) return `<span class="avatar${on} ${cls}" aria-hidden="true"><img src="${A.esc(m.av)}" alt="" loading="lazy"></span>`;
     return `<span class="avatar${on} ${cls}" style="--av:${color}" aria-hidden="true">${A.esc([...name][0])}</span>`;
@@ -277,19 +279,24 @@
     get open() {
       return !!sheetEl;
     },
-    /** 이미 열려 있으면 내용만 바꿈 */
+    /**
+     * 이미 열려 있으면 내용만 바꿈
+     * opt.onClose: 닫힐 때 실행 / opt.cls: 시트에 붙일 class / opt.swipe: 아래로 끌어내려 닫기
+     */
     show(title, html, opt = {}) {
       if (!sheetEl) {
         sheetEl = document.createElement('div');
-        sheetEl.className = 'sheet-wrap';
         sheetEl.innerHTML =
           '<div class="backdrop" data-sheet-close></div><div class="sheet" role="dialog" aria-modal="true">' +
+          '<div class="sheet-grab" aria-hidden="true"></div>' +
           `<div class="sheet-head"><b></b><button class="icon-btn" data-sheet-close aria-label="닫기">${A.ic('x')}</button></div>` +
           '<div class="sheet-body"></div></div>';
         $('#app').appendChild(sheetEl);
+        sheetSwipe(sheetEl);
         history.pushState({ ...(history.state || {}), sheet: true }, '');
         sheetPushed = true;
       }
+      sheetEl.className = 'sheet-wrap' + (opt.swipe ? ' swipe' : '') + (opt.cls ? ' ' + opt.cls : '');
       sheetOnClose = opt.onClose || null;
       $('.sheet-head b', sheetEl).textContent = title || '';
       const body = $('.sheet-body', sheetEl);
@@ -320,6 +327,77 @@
   document.addEventListener('click', (e) => {
     if (e.target.closest('[data-sheet-close]')) A.sheet.close();
   });
+
+  /**
+   * 시트 끌어내려 닫기 (opt.swipe 일 때만)
+   *  내용이 맨 위까지 올라가 있을 때 아래로 끌면 따라 내려오고,
+   *  1/4 넘게 내리거나 빠르게 튕기면 닫힘. 덜 내리면 제자리로
+   */
+  function sheetSwipe(wrap) {
+    const sheet = $('.sheet', wrap);
+    const back = $('.backdrop', wrap);
+    let y0 = null;
+    let dy = 0;
+    let t0 = 0;
+    let dragging = false;
+    let blockClick = false;
+    const begin = (y, target) => {
+      if (!wrap.classList.contains('swipe') || wrap.classList.contains('closing')) return;
+      if (target.closest('input, textarea, select')) return;
+      const body = $('.sheet-body', wrap);
+      if (body.scrollTop > 0 && !target.closest('.sheet-grab, .sheet-head')) return;
+      y0 = y;
+      dy = 0;
+      t0 = Date.now();
+      dragging = false;
+    };
+    const move = (y, e) => {
+      if (y0 === null) return;
+      dy = Math.max(0, y - y0);
+      if (!dragging) {
+        if (y - y0 < -6) return (y0 = null); // 위로 밀면 그냥 스크롤
+        if (dy < 8) return;
+        dragging = true;
+        sheet.style.animation = 'none';
+        sheet.style.transition = 'none';
+      }
+      if (e.cancelable) e.preventDefault();
+      sheet.style.transform = `translateY(${dy}px)`;
+      back.style.opacity = String(Math.max(0, 1 - dy / sheet.offsetHeight));
+    };
+    const end = () => {
+      if (y0 === null) return;
+      y0 = null;
+      if (!dragging) return;
+      dragging = false;
+      blockClick = true;
+      setTimeout(() => (blockClick = false), 50);
+      const fast = dy / Math.max(1, Date.now() - t0) > 0.6;
+      sheet.style.animation = '';
+      if (dy > sheet.offsetHeight / 4 || (fast && dy > 30)) {
+        back.style.opacity = '';
+        A.sheet.close(); // 지금 위치에서 그대로 내려가며 닫힘
+      } else {
+        sheet.style.transition = 'transform .25s cubic-bezier(.2,.7,.2,1)';
+        sheet.style.transform = '';
+        back.style.opacity = '';
+      }
+    };
+    sheet.addEventListener('touchstart', (e) => begin(e.touches[0].clientY, e.target), { passive: true });
+    sheet.addEventListener('touchmove', (e) => move(e.touches[0].clientY, e), { passive: false });
+    sheet.addEventListener('touchend', end);
+    sheet.addEventListener('touchcancel', end);
+    // 컴퓨터: 마우스로 끌기
+    const mm = (e) => move(e.clientY, e);
+    sheet.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      begin(e.clientY, e.target);
+      window.addEventListener('mousemove', mm);
+      window.addEventListener('mouseup', () => (window.removeEventListener('mousemove', mm), end()), { once: true });
+    });
+    // 끌기를 마친 순간의 클릭(버튼 눌림)은 무시
+    sheet.addEventListener('click', (e) => blockClick && (e.stopPropagation(), e.preventDefault()), true);
+  }
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (A.viewer && A.viewer.open) A.viewer.close();
@@ -784,7 +862,7 @@
   // ==================================================================
   // 알림 목록 (상단 종)
   // ==================================================================
-  const NOTI_IC = { task: ['checkSq', 'c-primary'], review: ['checkSq', 'c-leave'], approval: ['file', 'c-ok'], notice: ['megaphone', 'c-warn'], comment: ['comment', 'c-cyan'], org: ['user', 'c-leave'], pay: ['card', 'c-ok'], deadline: ['flag', 'c-danger'] };
+  const NOTI_IC = { task: ['checkSq', 'c-primary'], review: ['checkSq', 'c-leave'], approval: ['file', 'c-ok'], notice: ['megaphone', 'c-warn'], comment: ['comment', 'c-cyan'], org: ['user', 'c-leave'], pay: ['card', 'c-ok'], deadline: ['flag', 'c-danger'], post: ['board', 'c-primary'], chat: ['hash', 'c-gray'] };
   A.acts.noti = async () => {
     A.sheet.show('알림', '<div class="loading"><div class="spinner"></div></div>');
     const d = await A.api('noti.list');
