@@ -23,13 +23,26 @@
     B.posts = d.posts;
     B.hasMore = d.has_more;
     drawBoard(main);
-    if (d.board.can_write) A.$('#fab').innerHTML = `<button class="fab" data-go="cm/write/${B.board}">${ic('pen', 18, 2.2)}글쓰기</button>`;
+    setFab();
   };
 
+  /** 글쓰기 버튼: 이미 있으면 그대로 두고 주소만 바꿈 (게시판을 옮겨도 다시 그려지지 않게) */
+  function setFab() {
+    const fab = A.$('#fab');
+    if (!B.info.can_write) {
+      fab.innerHTML = '';
+      return;
+    }
+    const btn = fab.querySelector('.fab');
+    if (btn) btn.dataset.go = `cm/write/${B.board}`;
+    else fab.innerHTML = `<button class="fab" data-go="cm/write/${B.board}">${ic('pen', 18, 2.2)}글쓰기</button>`;
+  }
+
+  /** 목록에는 제목만 (내용 미리보기 없음) */
   function postRow(p) {
     return `<button class="post" data-go="cm/post/${p.id}"><div class="post-in"><div class="grow">
       ${p.pinned ? '<span class="tag primary">고정</span>' : ''}
-      <h4>${esc(p.title)}</h4><p class="ellipsis">${esc(p.preview)}</p>
+      <h4>${esc(p.title)}</h4>
       <div class="meta"><span>${esc(p.author)} · ${A.ago(p.ts)}</span>
         <span class="lk ${p.likes >= 10 ? 'hot' : ''}">${ic('heart', 13, 2.2)}${p.likes}</span>
         <span class="lk">${ic('comment', 13, 2.2)}${p.comments}</span>
@@ -37,17 +50,56 @@
       </div></div>${p.thumb ? `<img class="thumb" src="${esc(p.thumb)}" alt="" loading="lazy">` : ''}</div></button>`;
   }
 
+  // 화면 틀(제목 · 게시판 버튼)은 처음 한 번만 그리고, 게시판을 옮기면 목록(#boardBody)만 바꿈
   function drawBoard(main) {
-    const b = B.info;
     main.innerHTML = `
-      <div class="page-h"><div><h2>게시판</h2><p>${esc(b.description || '')}</p></div></div>
-      <div class="chips">${A.data.boards.map((x) => `<button class="chip ${x.id === B.board ? 'on' : ''}" data-go="cm/board/${x.id}">${esc(x.name)}</button>`).join('')}</div>
-      ${b.anonymous ? `<p class="board-note">${ic('eye', 15)}익명 게시판이에요. 글과 댓글에 이름이 보이지 않아요.</p>` : ''}
+      <div class="page-h"><div><h2>게시판</h2><p id="boardDesc">${esc(B.info.description || '')}</p></div></div>
+      <div class="chips" id="boardTabs">${A.data.boards.map((x) => `<button class="chip ${x.id === B.board ? 'on' : ''}" data-act="board-tab" data-id="${x.id}">${esc(x.name)}</button>`).join('')}</div>
+      <div id="boardBody">${boardBody()}</div>`;
+  }
+  function boardBody() {
+    return `${B.info.anonymous ? `<p class="board-note">${ic('eye', 15)}익명 게시판이에요. 글과 댓글에 이름이 보이지 않아요.</p>` : ''}
       <section class="card">
         ${B.posts.map(postRow).join('') || '<div class="empty">아직 글이 없어요. 첫 글을 써보세요!</div>'}
         ${B.hasMore ? '<button class="done-toggle" data-act="posts-more">더 보기</button>' : ''}
       </section>`;
   }
+
+  // 게시판 버튼: 주소만 바꾸고(기록은 남기지 않음) 목록만 새로 불러옴
+  let tabSeq = 0;
+  A.acts['board-tab'] = async (el) => {
+    const id = Number(el.dataset.id);
+    if (id === B.board) return;
+    const seq = ++tabSeq;
+    const prev = B.board;
+    const pick = (bid) => {
+      B.board = bid;
+      A.$$('#boardTabs .chip').forEach((c) => c.classList.toggle('on', Number(c.dataset.id) === bid));
+      history.replaceState(null, '', '#/cm/board/' + bid);
+      if (A.route) A.route.id = bid;
+    };
+    pick(id);
+    const body = A.$('#boardBody');
+    body.classList.add('dim');
+    let d;
+    try {
+      d = await A.api('posts', { board_id: id });
+    } catch (e) {
+      if (seq === tabSeq && A.isCurrent('cm-board')) pick(prev); // 못 불러오면 원래 게시판으로
+      throw e;
+    } finally {
+      if (seq === tabSeq) body.classList.remove('dim');
+    }
+    if (seq !== tabSeq || !A.isCurrent('cm-board')) return;
+    B.info = d.board;
+    B.posts = d.posts;
+    B.hasMore = d.has_more;
+    A.$('#boardDesc').textContent = d.board.description || '';
+    body.innerHTML = boardBody();
+    setFab();
+    A.$('#view').scrollTop = 0;
+  };
+
   A.acts['posts-more'] = async (el) => {
     el.disabled = true;
     const d = await A.api('posts', { board_id: B.board, before: B.posts[B.posts.length - 1].id });
@@ -55,7 +107,7 @@
     B.hasMore = d.has_more;
     const main = A.$('#view');
     const s = main.scrollTop;
-    drawBoard(main);
+    A.$('#boardBody').innerHTML = boardBody();
     main.scrollTop = s;
   };
 

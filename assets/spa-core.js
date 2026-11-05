@@ -784,7 +784,7 @@
   // ==================================================================
   // 알림 목록 (상단 종)
   // ==================================================================
-  const NOTI_IC = { task: ['checkSq', 'c-primary'], review: ['checkSq', 'c-leave'], approval: ['file', 'c-ok'], notice: ['megaphone', 'c-warn'], comment: ['comment', 'c-cyan'], org: ['user', 'c-leave'], pay: ['card', 'c-ok'], deadline: ['flag', 'c-danger'] };
+  const NOTI_IC = { task: ['checkSq', 'c-primary'], review: ['checkSq', 'c-leave'], approval: ['file', 'c-ok'], notice: ['megaphone', 'c-warn'], comment: ['comment', 'c-cyan'], org: ['user', 'c-leave'], pay: ['card', 'c-ok'], deadline: ['flag', 'c-danger'], post: ['board', 'c-primary'], chat: ['hash', 'c-gray'] };
   A.acts.noti = async () => {
     A.sheet.show('알림', '<div class="loading"><div class="spinner"></div></div>');
     const d = await A.api('noti.list');
