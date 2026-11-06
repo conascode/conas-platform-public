@@ -551,6 +551,24 @@ CREATE TABLE IF NOT EXISTS `in_meals` (
   CONSTRAINT `fk_in_meals_user` FOREIGN KEY (`updated_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- =====================================================================
+-- 모바일 사원증 바코드 확인 기록 (reader.php)
+--   result: ok 통과, expired 예전 코드(캡처 의심), invalid 없는 코드, inactive 이용 중지된 사람
+-- =====================================================================
+CREATE TABLE IF NOT EXISTS `in_idcard_scans` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `user_id` int DEFAULT NULL COMMENT '찍힌 사원증의 주인 (없는 코드면 NULL)',
+  `scanned_by` int DEFAULT NULL COMMENT '리더기를 쓴 사람',
+  `result` varchar(10) NOT NULL COMMENT 'ok, expired, invalid, inactive',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_user` (`user_id`,`id`),
+  KEY `idx_time` (`created_at`),
+  KEY `fk_in_scan_by` (`scanned_by`),
+  CONSTRAINT `fk_in_scan_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_in_scan_by` FOREIGN KEY (`scanned_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- =====================================================================

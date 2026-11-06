@@ -30,52 +30,110 @@
       ${g('기타', [
         [A.theme.get() === 'dark' ? '밝은 화면' : '어두운 화면', A.theme.get() === 'dark' ? 'sun' : 'moon', 'c-gray', 'act:theme-toggle'],
         ...(me().is_admin ? [['관리자', 'shield', 'c-leave', 'admin/members', b.pending]] : []),
+        ...(me().can_manage ? [['사원증 리더기', 'qr', 'c-gray', 'act:open-reader']] : []),
         ['로그아웃', 'logout', 'c-danger', 'act:logout'],
       ])}`;
   };
   // ==================================================================
   // 모바일 사원증 (전체 > 맨 위 프로필)
-  //  아래에서 화면 끝까지 올라오는 시트. 아래로 끌어내리거나 돌아가기 · 뒤로가기로 닫힘
-  //  시계가 1초마다 움직이고 안내 문구가 흘러가서 캡처한 화면이 아니라는 걸 보여줌
+  //  아래에서 화면 끝까지 올라오는 시트. 아래로 끌어내리거나 뒤로가기로 닫힘
+  //  바코드: 서버가 30초마다 새로 주는 코드(Code128). reader.php 에서 찍으면 서버가 확인
+  //  시계 · 흐르는 문구 · 남은 초가 움직여서 캡처한 화면이 아니라는 걸 보여줌
   // ==================================================================
+
+  /** Code128 막대 폭 (값 0~106). 106은 끝 표시 */
+  const C128 = '212222 222122 222221 121223 121322 131222 122213 122312 132212 221213 221312 231212 112232 122132 122231 113222 123122 123221 223211 221132 221231 213212 223112 312131 311222 321122 321221 312212 322112 322211 212123 212321 232121 111323 131123 131321 112313 132113 132311 211313 231113 231311 112133 112331 132131 113123 113321 133121 313121 211331 231131 213113 213311 213131 311123 311321 331121 312113 312311 332111 314111 221411 431111 111224 111422 121124 121421 141122 141221 112214 112412 122114 122411 142112 142211 241211 221114 413111 241112 134111 111242 121142 121241 114212 124112 124211 411212 421112 421211 212141 214121 412121 111143 111341 131141 114113 114311 411113 411311 113141 114131 311141 411131 211412 211214 211232 2331112'.split(' ');
+  /** 숫자(짝수 자리)를 Code128-C 바코드 SVG로. 양옆에 10칸 여백 */
+  A.code128 = (digits) => {
+    if (!/^(\d\d)+$/.test(digits)) return '';
+    const vals = [105];
+    for (let i = 0; i < digits.length; i += 2) vals.push(Number(digits.slice(i, i + 2)));
+    vals.push(vals.reduce((sum, v, i) => sum + v * (i || 1), 0) % 103); // 검사 값
+    vals.push(106);
+    let x = 10;
+    let rects = '';
+    for (const v of vals) {
+      [...C128[v]].forEach((w, i) => {
+        if (i % 2 === 0) rects += `<rect x="${x}" width="${w}" height="40"/>`;
+        x += Number(w);
+      });
+    }
+    return `<svg class="bc" viewBox="0 0 ${x + 10} 40" preserveAspectRatio="none" shape-rendering="crispEdges" role="img" aria-label="사원증 바코드">${rects}</svg>`;
+  };
+
   A.acts['id-card'] = () => {
     const m = me();
+    const mark = `${A.BASE}/assets/conas-mark.svg`;
     const dept = m.role === 'ceo' ? '대표이사' : [m.team || '소속 없음', m.role === 'lead' ? '팀장' : m.position].filter(Boolean).join(' · ');
-    const since = m.joined_on ? m.joined_on.replace(/^(\d+)-(\d+)-(\d+)$/, '$1. $2. $3') : '';
     const photo = m.av
       ? `<img src="${esc(m.av)}" alt="">`
-      : `<span class="idv-noimg" style="--av:${A.avatarColor(m.name)}">${esc([...(m.name || '?')][0])}</span>`;
-    const notice = `<span>정상 발급된 모바일 사원증입니다.</span><span class="idv-mk"><img src="${A.BASE}/assets/icons/icon-192.png" alt="">CONAS</span>`;
-    let timer = null;
+      : `<span class="idc-noimg" style="--av:${A.avatarColor(m.name)}">${esc([...(m.name || '?')][0])}</span>`;
+    const notice = `<span class="idc-mk"><img src="${mark}" alt="">CONAS</span><span>정상 발급된 모바일 사원증입니다.</span>`;
+    const st = { timer: null, refetch: null, expires: 0, code: '' };
     A.sheet.show(
       '',
-      `<div class="idv">
-        <div class="idv-card">
-          <div class="idv-head">사원증</div>
-          <div class="idv-brand"><img src="${A.BASE}/assets/icons/icon-192.png" alt="">CONAS</div>
-          <div class="idv-photo">${photo}</div>
-          <b class="idv-name">${esc(m.name)}</b>
-          <p class="idv-dept">${esc(dept)}</p>
-          <p class="idv-no">${m.employee_no ? esc(m.employee_no) : '<span class="idv-none">사원번호 미등록</span>'}</p>
-          <div class="idv-ok"><p>위 사람은 당사 출입을 허용함</p>${since ? `<p class="idv-date">${since}</p>` : ''}</div>
-          <button class="idv-back" data-sheet-close>${ic('reply', 20, 2.2)}돌아가기</button>
-        </div>
-        <time class="idv-clock" id="idvClock"></time>
-        <div class="idv-marquee" aria-hidden="true"><div>${notice.repeat(3)}${notice.repeat(3)}</div></div>
+      `<div class="idc">
+        <div class="idc-stage"><div class="idc-flip">
+          <section class="idc-face">
+            <img class="idc-deco" src="${mark}" alt="">
+            <div class="idc-logo"><img src="${mark}" alt="">CONAS</div>
+            <div class="idc-photo">${photo}</div>
+            <b class="idc-name">${esc(m.name)}</b>
+            <p class="idc-dept">${esc(dept)}</p>
+            <p class="idc-no"><span>사번</span>${m.employee_no ? `<b>${esc(m.employee_no)}</b>` : '<em>미등록</em>'}</p>
+            <div class="idc-bottom">
+              <p class="idc-left" id="idcLeft">바코드 받는 중…</p>
+              <div class="idc-bar" id="idcBar"></div>
+            </div>
+          </section>
+          <section class="idc-face idc-back"><img src="${mark}" alt=""><b>CONAS</b></section>
+        </div></div>
+        <time class="idc-clock" id="idcClock"></time>
+        <div class="idc-ticker" aria-hidden="true"><div>${notice.repeat(4)}${notice.repeat(4)}</div></div>
       </div>`,
-      { cls: 'sheet-idcard', swipe: true, onClose: () => clearInterval(timer) }
+      {
+        cls: 'sheet-idcard',
+        swipe: true,
+        onClose: () => {
+          clearInterval(st.timer);
+          clearTimeout(st.refetch);
+        },
+      }
     );
+    // 바코드: 서버에서 받고, 남은 초가 끝나면 다시 받음
+    const fetchCode = async () => {
+      clearTimeout(st.refetch);
+      try {
+        const r = await A.api('idcard.code');
+        if (!A.$('#idcBar')) return;
+        st.code = r.code;
+        st.expires = Date.now() + r.ttl * 1000;
+        A.$('#idcBar').innerHTML = A.code128(r.code) + `<span class="idc-digits">${r.code.replace(/(\d{4})(?=\d)/g, '$1 ')}</span>`;
+        A.$('#idcBar').classList.remove('off');
+        st.refetch = setTimeout(fetchCode, r.ttl * 1000 + 300);
+      } catch (e) {
+        if (!A.$('#idcBar')) return;
+        st.expires = 0;
+        A.$('#idcBar').classList.add('off');
+        A.$('#idcLeft').textContent = '인터넷 연결을 확인해 주세요';
+        st.refetch = setTimeout(fetchCode, 5000);
+      }
+    };
     const tick = () => {
-      const el = A.$('#idvClock');
-      if (!el) return clearInterval(timer);
+      const el = A.$('#idcClock');
+      if (!el) return clearInterval(st.timer);
       const d = new Date();
       const h = d.getHours();
       el.textContent = `${d.getFullYear()}.${A.pad(d.getMonth() + 1)}.${A.pad(d.getDate())} (${A.DOW[d.getDay()]}) ${h < 12 ? '오전' : '오후'} ${A.pad(h % 12 || 12)}시 ${A.pad(d.getMinutes())}분 ${A.pad(d.getSeconds())}초`;
+      if (st.expires) A.$('#idcLeft').textContent = `${Math.max(0, Math.ceil((st.expires - Date.now()) / 1000))}초 후 갱신`;
     };
+    fetchCode();
     tick();
-    timer = setInterval(tick, 1000);
+    st.timer = setInterval(tick, 1000);
   };
 
+  // 사원증 리더기 (대표 · 관리자): 따로 된 페이지
+  A.acts['open-reader'] = () => (location.href = A.BASE + '/reader.php');
   A.acts['theme-toggle'] = () => {
     A.theme.set(A.theme.get() === 'dark' ? 'light' : 'dark');
     A.refresh();

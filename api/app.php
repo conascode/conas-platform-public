@@ -75,6 +75,10 @@ $routes = [
     'notice.confirm' => ['POST', 'notice'],
     'notice.save'    => ['POST', 'notice'],
     'notice.delete'  => ['POST', 'notice'],
+    // 모바일 사원증 바코드 · 리더기
+    'idcard.code'    => ['GET',  'idcard'],
+    'idcard.verify'  => ['POST', 'idcard'],
+    'idcard.scans'   => ['GET',  'idcard'],
     // 구내식당
     'meals'          => ['GET',  'meal'],
     'meal.save'      => ['POST', 'meal'],

@@ -429,32 +429,43 @@ main.chat { background: var(--chat-bg); }
 .profile b { font-size: 19px; font-weight: 800; }
 .profile p { font-size: 14px; color: var(--sub); margin-top: 2px; }
 .idc-open { display: inline-flex; align-items: center; gap: 4px; height: 30px; padding: 0 10px; border-radius: 15px; background: var(--primary-soft); color: var(--primary); font-size: 13px; font-weight: 700; flex: none; }
-/* 모바일 사원증 (#/idcard) */
-.idv > :first-child { margin-top: auto; }
-.idv > :last-child { margin-bottom: auto; }
-.idv { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 4px 18px calc(16px + env(safe-area-inset-bottom)); }
-.idv-card { width: 100%; max-width: 400px; background: var(--surface); border-radius: 26px; overflow: hidden; box-shadow: 0 10px 30px rgba(25,31,40,.08); text-align: center; padding-bottom: 26px; }
-.idv-head { height: 58px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 21px; font-weight: 800; letter-spacing: .04em; background: linear-gradient(90deg, var(--primary), #1098ad); }
-.idv-brand { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 28px 0 22px; font-size: 30px; font-weight: 900; letter-spacing: -.01em; color: var(--primary); }
-.idv-brand img { width: 38px; height: 38px; }
-.idv-photo { width: 132px; height: 170px; margin: 0 auto; border-radius: 10px; overflow: hidden; background: var(--surface-2); box-shadow: 0 0 0 1px var(--line); }
-.idv-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.idv-noimg { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; background: var(--av); color: #fff; font-size: 58px; font-weight: 800; }
-.idv-name { display: block; margin-top: 22px; font-size: 30px; font-weight: 900; letter-spacing: .02em; color: var(--primary); }
-.idv-dept { margin-top: 8px; font-size: 17px; color: var(--ink-2); }
-.idv-no { margin-top: 4px; font-size: 17px; color: var(--ink-2); letter-spacing: .04em; font-variant-numeric: tabular-nums; }
-.idv-ok { margin: 28px 24px 0; font-size: 16px; color: var(--ink-2); line-height: 1.6; }
-.idv-none { color: var(--faint); font-size: 15px; letter-spacing: 0; }
-.idv-date { font-variant-numeric: tabular-nums; }
-.idv-back { display: inline-flex; align-items: center; gap: 10px; margin-top: 28px; height: 52px; padding: 0 34px; border-radius: 26px; background: var(--primary-soft); color: var(--primary); font-size: 17px; font-weight: 800; }
-.idv-clock { margin-top: 22px; font-size: 20px; font-weight: 700; color: var(--primary); font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
-.idv-marquee { width: calc(100% + 36px); flex: none; margin-top: 10px; overflow: hidden; background: var(--primary-soft); color: var(--primary); font-size: 15px; font-weight: 600; }
-.idv-marquee > div { display: flex; width: max-content; animation: idvRoll 18s linear infinite; }
-.idv-marquee span { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; white-space: nowrap; }
-.idv-mk { font-weight: 900; }
-.idv-mk img { width: 18px; height: 18px; }
-@keyframes idvRoll { to { transform: translateX(-50%); } }
-@media (prefers-reduced-motion: reduce) { .idv-marquee > div { animation-duration: 60s; } }
+/* 모바일 사원증: 실물 사원증 비율(54×85.6) 카드, 열 때 한 바퀴 돌며 나타남 */
+.idc { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 6px 16px calc(14px + env(safe-area-inset-bottom)); -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.idc > :first-child { margin-top: auto; }
+.idc > :last-child { margin-bottom: auto; }
+.idc-stage { width: 100%; perspective: 1200px; animation: idcFade .24s linear .1s both; }
+.idc-flip { position: relative; width: 86%; max-width: 340px; aspect-ratio: 54 / 85.6; margin: 0 auto; transform-style: preserve-3d; animation: idcSpin 1.15s cubic-bezier(.16,.84,.3,1) .1s both; }
+.idc-face { position: absolute; inset: 0; overflow: hidden; display: flex; flex-direction: column; border-radius: 14px; background: #0e0b22; color: #fff; padding: 26px 24px 21px; box-shadow: 0 10px 30px rgba(14,11,34,.22); -webkit-backface-visibility: hidden; backface-visibility: hidden; }
+.idc-back { transform: rotateY(180deg); align-items: center; justify-content: center; gap: 14px; }
+.idc-back img { width: 42%; }
+.idc-back b { font-size: 22px; font-weight: 800; letter-spacing: .08em; }
+.idc-deco { position: absolute; left: 67%; top: 61px; width: 66%; pointer-events: none; }
+.idc-logo { position: relative; display: flex; align-items: center; gap: 8px; font-size: 20px; font-weight: 700; }
+.idc-logo img { width: 30px; height: 30px; }
+.idc-photo { position: relative; width: 44%; aspect-ratio: 3 / 4; margin-top: 18px; border-radius: 10px; overflow: hidden; background: rgba(255,255,255,.09); }
+.idc-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.idc-noimg { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; background: var(--av); color: #fff; font-size: 46px; font-weight: 800; }
+.idc-name { position: relative; margin-top: 16px; font-size: 30px; font-weight: 800; letter-spacing: -.01em; line-height: 1.2; }
+.idc-dept { position: relative; margin-top: 4px; font-size: 15px; color: rgba(255,255,255,.72); }
+.idc-no { position: relative; display: flex; gap: 10px; align-items: baseline; margin-top: 12px; font-size: 15px; color: rgba(255,255,255,.72); }
+.idc-no b { color: #39f59a; font-weight: 700; letter-spacing: .02em; font-variant-numeric: tabular-nums; }
+.idc-no em { font-style: normal; color: rgba(255,255,255,.4); }
+.idc-bottom { position: relative; margin-top: auto; border-top: 1px solid rgba(255,255,255,.14); padding-top: 10px; }
+.idc-left { text-align: right; font-size: 12px; color: rgba(255,255,255,.66); font-variant-numeric: tabular-nums; margin-bottom: 6px; }
+.idc-bar { background: #fff; border-radius: 8px; padding: 8px 10px 4px; min-height: 66px; display: flex; flex-direction: column; justify-content: center; transition: opacity .2s; }
+.idc-bar .bc { display: block; width: 100%; height: 42px; fill: #0e0b22; }
+.idc-digits { display: block; text-align: center; font-size: 11px; letter-spacing: .12em; color: #0e0b22; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.idc-bar.off { opacity: .35; }
+.idc-clock { margin-top: 18px; font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.idc-ticker { width: calc(100% + 32px); flex: none; margin-top: 10px; overflow: hidden; background: var(--surface); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); font-size: 14px; font-weight: 600; color: var(--ink-2); }
+.idc-ticker > div { display: flex; width: max-content; animation: idcTicker 40s linear infinite; }
+.idc-ticker span { display: inline-flex; align-items: center; gap: 6px; padding: 9px 12px; white-space: nowrap; }
+.idc-mk { font-weight: 800; color: var(--ink); }
+.idc-mk img { width: 18px; height: 18px; }
+@keyframes idcSpin { 0% { transform: rotateY(-360deg); } 68% { transform: rotateY(14deg); } 84% { transform: rotateY(-5deg); } 100% { transform: none; } }
+@keyframes idcFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes idcTicker { to { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) { .idc-flip { animation: none; } .idc-ticker > div { animation-duration: 120s; } }
 .menu-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 0; border-top: 1px solid var(--line); font-size: 15px; font-weight: 600; text-align: left; }
 .menu-row:first-child { border-top: 0; padding-top: 4px; }
 .menu-row .grow { flex: 1; }
@@ -757,7 +768,7 @@ main.chat { animation: chatIn .32s cubic-bezier(.2,.7,.2,1); }
 /* 모바일 사원증: 화면 끝까지 올라오는 시트 */
 .sheet-wrap.sheet-idcard .sheet { height: calc(100% - 10px); max-height: none; background: var(--surface-2); overflow: hidden; animation-duration: .38s; }
 .sheet-wrap.sheet-idcard .sheet-head { display: none; }
-.sheet-wrap.swipe .sheet-grab, .sheet-wrap.sheet-idcard .idv { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.sheet-wrap.swipe .sheet-grab { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .sheet-wrap.sheet-idcard .sheet-body { flex: 1; display: flex; flex-direction: column; padding: 0; overflow-x: hidden; }
 @keyframes down { to { transform: translateY(100%); } }
 @keyframes fade { from { opacity: 0; } }
