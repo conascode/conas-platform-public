@@ -60,7 +60,15 @@ header span { margin-left: auto; font-size: 13px; color: var(--sub); }
 .hint { font-size: 13px; color: var(--sub); line-height: 1.6; }
 video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .cam-frame { position: absolute; left: 10%; right: 10%; top: 38%; height: 24%; border: 3px solid var(--ok); border-radius: 14px; box-shadow: 0 0 0 999px rgba(0,0,0,.35); pointer-events: none; }
-.cam-tip { position: absolute; left: 0; right: 0; bottom: 16px; font-size: 15px; font-weight: 700; text-shadow: 0 1px 4px rgba(0,0,0,.6); }
+.cam-tip { position: absolute; left: 0; right: 0; bottom: 14px; font-size: 15px; font-weight: 700; line-height: 1.5; text-shadow: 0 1px 4px rgba(0,0,0,.7); pointer-events: none; }
+.cam-tip small { font-size: 12px; font-weight: 600; opacity: .85; }
+.panel.cam { padding: 0; }
+.cam-tools { position: absolute; top: 12px; left: 12px; right: 12px; display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+.cam-tools button { height: 36px; min-width: 46px; padding: 0 12px; border-radius: 18px; border: 0; background: rgba(0,0,0,.55); color: #fff; font-weight: 800; font-size: 14px; cursor: pointer; }
+.cam-tools button.on { background: var(--ok); color: #0e0b22; }
+.cam-focus { position: absolute; width: 64px; height: 64px; margin: -32px 0 0 -32px; border: 2px solid #fff; border-radius: 50%; opacity: 0; pointer-events: none; }
+.cam-focus.show { animation: camFocus .8s ease-out; }
+@keyframes camFocus { 0% { opacity: 1; transform: scale(1.4); } 40% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1); } }
 .recent { background: var(--card); border-radius: 18px; padding: 6px 16px; }
 .recent h3 { font-size: 14px; color: var(--sub); padding: 10px 0 4px; font-weight: 700; }
 .recent li { list-style: none; display: flex; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); font-size: 15px; }
@@ -87,7 +95,7 @@ video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cov
     <button class="btn" type="submit">확인</button>
     <button class="btn ghost" type="button" id="camBtn">카메라</button>
   </form>
-  <p class="hint">USB · 블루투스 바코드 리더기는 이 화면을 열어 두고 바로 찍으면 돼요. 휴대폰은 <b>카메라</b>를 눌러 사원증 바코드를 비춰 주세요. 코드는 30초마다 바뀌어서, 캡처한 화면은 금방 '만료'로 나와요.</p>
+  <p class="hint">USB · 블루투스 바코드 리더기는 이 화면을 열어 두고 바로 찍으면 돼요. 휴대폰은 <b>카메라</b>를 눌러 사원증 바코드를 비춰 주세요. 초점이 안 맞으면 조금 떨어져서 <b>2×</b>로 확대하거나, 찍는 사람에게 사원증 바코드를 눌러 <b>크게 보기</b>를 켜 달라고 하세요. 코드는 30초마다 바뀌어서, 캡처한 화면은 금방 '만료'로 나와요.</p>
   <section class="recent"><h3>최근 확인</h3><ul id="recent"></ul></section>
   <a class="btn ghost" href="<?= e(url('') . '#/all') ?>" style="display:flex;align-items:center;justify-content:center;text-decoration:none">앱으로 돌아가기</a>
 <?php endif; ?>
@@ -210,7 +218,7 @@ video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cov
   let stream = null;
   let lastCode = '';
   let lastAt = 0;
-  async function startCam() {
+  async function startCam(deviceId) {
     if (!('BarcodeDetector' in window)) {
       alert('이 브라우저는 카메라로 바코드를 읽을 수 없어요.\n안드로이드 크롬을 쓰거나, USB · 블루투스 바코드 리더기를 연결해 주세요.');
       return;
@@ -222,24 +230,44 @@ video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cov
       return;
     }
     const det = new BarcodeDetector({ formats: ['code_128'] });
+    if (stream) stream.getTracks().forEach((t) => t.stop());
+    // 고해상도로 열어야 가는 막대가 뭉개지지 않음. 자동 초점은 계속 켜 둠
+    const video = {
+      width: { ideal: 1920 },
+      height: { ideal: 1080 },
+      advanced: [{ focusMode: 'continuous' }],
+    };
+    if (deviceId) video.deviceId = { exact: deviceId };
+    else video.facingMode = { ideal: 'environment' };
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+      stream = await navigator.mediaDevices.getUserMedia({ video, audio: false });
     } catch (e) {
-      alert('카메라를 쓸 수 없어요. 브라우저에서 카메라 권한을 허용해 주세요.');
-      return;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: 'environment' }, audio: false });
+      } catch (e2) {
+        alert('카메라를 쓸 수 없어요. 브라우저에서 카메라 권한을 허용해 주세요.');
+        return;
+      }
     }
+    const track = stream.getVideoTracks()[0];
+    cam.id = (track.getSettings && track.getSettings().deviceId) || deviceId || '';
     camOn = true;
     $('#camBtn').textContent = '카메라 끄기';
     clearTimeout(resetTimer);
-    panel.className = 'panel';
-    panel.innerHTML = '<video playsinline muted></video><div class="cam-frame"></div><p class="cam-tip">사원증 바코드를 초록 칸에 맞춰 주세요</p>';
-    const video = panel.querySelector('video');
-    video.srcObject = stream;
-    await video.play().catch(() => {});
+    panel.className = 'panel cam';
+    panel.innerHTML = `<video playsinline muted></video><div class="cam-frame"></div><span class="cam-focus" id="camFocus"></span>
+      <div class="cam-tools" id="camTools"></div>
+      <p class="cam-tip">바코드를 초록 칸에 맞춰 주세요<br><small>15~20cm 떨어져서 · 흐리면 화면을 톡 눌러 초점</small></p>`;
+    const el = panel.querySelector('video');
+    el.srcObject = stream;
+    await el.play().catch(() => {});
+    await camTools(track);
+    // 화면을 누르면 그 자리에 초점 다시 맞추기
+    el.addEventListener('click', (e) => focusAt(track, e, el));
     const loop = async () => {
       if (!camOn) return;
       try {
-        const found = await det.detect(video);
+        const found = await det.detect(el);
         const hit = found.find((b) => /^88\d{14}$/.test(b.rawValue));
         if (hit && !(hit.rawValue === lastCode && Date.now() - lastAt < 4000)) {
           lastCode = hit.rawValue;
@@ -249,9 +277,72 @@ video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cov
           return;
         }
       } catch (e) { /* 다음 화면에서 다시 */ }
-      setTimeout(loop, 250);
+      setTimeout(loop, 150);
     };
     loop();
+  }
+
+  // 카메라 도구: 확대(줌) · 렌즈 바꾸기 (기기가 지원할 때만 보임)
+  const cam = { id: '', zoom: 1 };
+  async function camTools(track) {
+    const box = $('#camTools');
+    const caps = track.getCapabilities ? track.getCapabilities() : {};
+    let html = '';
+    // 확대: 조금 떨어져서 확대해 찍으면 초점이 훨씬 잘 맞음. 지원하면 2배로 시작
+    if (caps.zoom && caps.zoom.max > caps.zoom.min) {
+      const steps = [1, 1.5, 2, 3].filter((z) => z >= caps.zoom.min && z <= caps.zoom.max);
+      const start = steps.includes(2) ? 2 : steps[steps.length - 1];
+      await setZoom(track, start);
+      html += steps.map((z) => `<button type="button" class="${z === cam.zoom ? 'on' : ''}" data-zoom="${z}">${z}×</button>`).join('');
+    }
+    // 뒷면 카메라가 여러 개면 바꾸기 (광각 렌즈는 초점이 안 맞는 경우가 많음)
+    try {
+      const all = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput');
+      const back = all.filter((d) => !/front|user|전면/i.test(d.label));
+      cam.list = (back.length ? back : all).map((d) => d.deviceId);
+      if (cam.list.length > 1) html += '<button type="button" data-switch="1" title="다른 카메라">렌즈 바꾸기</button>';
+    } catch (e) { cam.list = []; }
+    box.innerHTML = html;
+    box.onclick = async (e) => {
+      const z = e.target.closest('[data-zoom]');
+      if (z) {
+        await setZoom(track, Number(z.dataset.zoom));
+        box.querySelectorAll('[data-zoom]').forEach((b) => b.classList.toggle('on', Number(b.dataset.zoom) === cam.zoom));
+      }
+      if (e.target.closest('[data-switch]')) {
+        const i = cam.list.indexOf(cam.id);
+        startCam(cam.list[(i + 1) % cam.list.length]);
+      }
+    };
+  }
+  async function setZoom(track, z) {
+    try {
+      await track.applyConstraints({ advanced: [{ zoom: z }] });
+      cam.zoom = z;
+    } catch (e) { /* 지원 안 함 */ }
+  }
+  async function focusAt(track, e, el) {
+    const caps = track.getCapabilities ? track.getCapabilities() : {};
+    const r = el.getBoundingClientRect();
+    const x = (e.clientX - r.left) / r.width;
+    const y = (e.clientY - r.top) / r.height;
+    const f = $('#camFocus');
+    if (f) {
+      f.style.left = e.clientX - panel.getBoundingClientRect().left + 'px';
+      f.style.top = e.clientY - panel.getBoundingClientRect().top + 'px';
+      f.classList.remove('show'); void f.offsetWidth; f.classList.add('show');
+    }
+    const modes = caps.focusMode || [];
+    try {
+      if (modes.includes('single-shot')) {
+        await track.applyConstraints({ advanced: [{ focusMode: 'single-shot', pointsOfInterest: [{ x, y }] }] });
+        setTimeout(() => track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {}), 1500);
+      } else if (modes.includes('continuous')) {
+        // 초점을 한 번 풀었다가 다시 잡게 함
+        await track.applyConstraints({ advanced: [{ focusMode: 'manual' }] }).catch(() => {});
+        await track.applyConstraints({ advanced: [{ focusMode: 'continuous', pointsOfInterest: [{ x, y }] }] });
+      }
+    } catch (err) { /* 지원 안 함 */ }
   }
   function stopCam() {
     camOn = false;
@@ -261,7 +352,7 @@ video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cov
     if (panel.querySelector('video')) idle();
     input.focus();
   }
-  $('#camBtn').addEventListener('click', () => (camOn ? stopCam() : startCam()));
+  $('#camBtn').addEventListener('click', () => (camOn ? stopCam() : startCam(cam.id || undefined)));
   window.addEventListener('pagehide', () => { if (stream) stream.getTracks().forEach((t) => t.stop()); });
 
   idle();

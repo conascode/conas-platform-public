@@ -373,7 +373,7 @@
     let blockClick = false;
     const begin = (y, target) => {
       if (!wrap.classList.contains('swipe') || wrap.classList.contains('closing')) return;
-      if (target.closest('input, textarea, select')) return;
+      if (target.closest('input, textarea, select, .no-swipe')) return;
       const body = $('.sheet-body', wrap);
       if (body.scrollTop > 0 && !target.closest('.sheet-grab, .sheet-head')) return;
       y0 = y;

@@ -82,13 +82,19 @@
             <p class="idc-dept">${esc(dept)}</p>
             <p class="idc-no"><span>사번</span>${m.employee_no ? `<b>${esc(m.employee_no)}</b>` : '<em>미등록</em>'}</p>
             <div class="idc-bottom">
-              <p class="idc-left" id="idcLeft">바코드 받는 중…</p>
-              <div class="idc-bar" id="idcBar"></div>
+              <p class="idc-left"><span>눌러서 크게 보기</span><span id="idcLeft">바코드 받는 중…</span></p>
+              <button type="button" class="idc-bar" id="idcBar" aria-label="바코드 크게 보기"></button>
             </div>
           </section>
           <section class="idc-face idc-back"><img src="${mark}" alt=""><b>CONAS</b></section>
         </div></div>
         <time class="idc-clock" id="idcClock"></time>
+        <div class="idc-big no-swipe" id="idcBig" hidden>
+          <p class="idc-big-h"><img src="${mark}" alt=""><b>${esc(m.name)}</b><span>${esc(m.employee_no || '')}</span></p>
+          <div class="idc-big-bar" id="idcBigBar"></div>
+          <p class="idc-big-left" id="idcBigLeft"></p>
+          <p class="idc-big-tip">15~20cm 떨어져서 비춰 주세요 · 화면을 밝게 하면 더 잘 읽혀요<br><b>눌러서 닫기</b></p>
+        </div>
         <div class="idc-ticker" aria-hidden="true"><div>${notice.repeat(4)}${notice.repeat(4)}</div></div>
       </div>`,
       {
@@ -108,13 +114,17 @@
         if (!A.$('#idcBar')) return;
         st.code = r.code;
         st.expires = Date.now() + r.ttl * 1000;
-        A.$('#idcBar').innerHTML = A.code128(r.code) + `<span class="idc-digits">${r.code.replace(/(\d{4})(?=\d)/g, '$1 ')}</span>`;
+        const digits = `<span class="idc-digits">${r.code.replace(/(\d{4})(?=\d)/g, '$1 ')}</span>`;
+        A.$('#idcBar').innerHTML = A.code128(r.code) + digits;
+        A.$('#idcBigBar').innerHTML = A.code128(r.code) + digits;
         A.$('#idcBar').classList.remove('off');
+        A.$('#idcBigBar').classList.remove('off');
         st.refetch = setTimeout(fetchCode, r.ttl * 1000 + 300);
       } catch (e) {
         if (!A.$('#idcBar')) return;
         st.expires = 0;
         A.$('#idcBar').classList.add('off');
+        A.$('#idcBigBar').classList.add('off');
         A.$('#idcLeft').textContent = '인터넷 연결을 확인해 주세요';
         st.refetch = setTimeout(fetchCode, 5000);
       }
@@ -125,8 +135,15 @@
       const d = new Date();
       const h = d.getHours();
       el.textContent = `${d.getFullYear()}.${A.pad(d.getMonth() + 1)}.${A.pad(d.getDate())} (${A.DOW[d.getDay()]}) ${h < 12 ? '오전' : '오후'} ${A.pad(h % 12 || 12)}시 ${A.pad(d.getMinutes())}분 ${A.pad(d.getSeconds())}초`;
-      if (st.expires) A.$('#idcLeft').textContent = `${Math.max(0, Math.ceil((st.expires - Date.now()) / 1000))}초 후 갱신`;
+      if (st.expires) {
+        const left = `${Math.max(0, Math.ceil((st.expires - Date.now()) / 1000))}초 후 갱신`;
+        A.$('#idcLeft').textContent = left;
+        A.$('#idcBigLeft').textContent = left;
+      }
     };
+    // 바코드 크게 보기: 화면 폭을 가득 채운 바코드 (카메라가 초점을 잡기 쉬움). 누르면 닫힘
+    A.$('#idcBar').addEventListener('click', () => (A.$('#idcBig').hidden = false));
+    A.$('#idcBig').addEventListener('click', () => (A.$('#idcBig').hidden = true));
     fetchCode();
     tick();
     st.timer = setInterval(tick, 1000);
