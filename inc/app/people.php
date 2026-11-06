@@ -126,7 +126,7 @@ function can_review_task(array $t, array $me): bool
 function api_badges(array $me, array $in): array
 {
     q('UPDATE in_members SET last_seen_at = NOW() WHERE user_id = ?', [$me['id']]);
-    return ['badges' => badges($me), 'csrf' => csrf_token(), 'version' => APP_VERSION];
+    return ['badges' => badges($me), 'online' => online_ids(), 'csrf' => csrf_token(), 'version' => APP_VERSION];
 }
 
 /** 비밀번호 변경 (conas.kr 메인 사이트 비밀번호도 함께 바뀜). 다른 기기의 로그인 유지는 해제 */

@@ -12,6 +12,8 @@ defined('IN_APP') or exit;
  */
 
 const ROLE_LABEL = ['ceo' => '대표', 'lead' => '팀장', 'member' => '팀원'];
+/** 마지막 신호가 이 시간(분) 안이면 '접속 중' */
+const ONLINE_MINUTES = 3;
 const POSITIONS = ['사원', '주임', '대리', '과장', '차장', '부장', '이사', '대표이사'];
 
 /** API 에러 (사용자에게 보여줄 메시지) */
@@ -38,7 +40,7 @@ function org_members(bool $refresh = false): array
     $rows = q(
         "SELECT u.id, u.username, u.email, m.display_name, m.employee_no, m.avatar, m.phone, m.team_id, t.name AS team_name,
                 m.role, m.position, m.joined_on, m.annual_leave, m.is_admin, m.status,
-                (m.last_seen_at >= NOW() - INTERVAL 3 MINUTE) AS online
+                (m.last_seen_at >= NOW() - INTERVAL " . ONLINE_MINUTES . " MINUTE) AS online
            FROM in_members m
            JOIN users u ON u.id = m.user_id
            LEFT JOIN in_teams t ON t.id = m.team_id
@@ -54,6 +56,14 @@ function org_members(bool $refresh = false): array
         $cache[$r['id']] = $r;
     }
     return $cache;
+}
+
+/** 지금 접속 중인 직원 id 목록 (배지 폴링 때마다 화면에 보내서 초록 점을 갱신) */
+function online_ids(): array
+{
+    return array_map('intval', q(
+        "SELECT user_id FROM in_members WHERE status = 'active' AND last_seen_at >= NOW() - INTERVAL " . ONLINE_MINUTES . ' MINUTE'
+    )->fetchAll(PDO::FETCH_COLUMN));
 }
 
 function org_member(int $id): ?array

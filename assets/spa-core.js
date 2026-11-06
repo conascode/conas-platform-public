@@ -151,8 +151,37 @@
     const name = m.name || '?';
     const color = A.avatarColor(name);
     const on = m.online ? ' on' : '';
-    if (m.av) return `<span class="avatar${on} ${cls}" aria-hidden="true"><img src="${A.esc(m.av)}" alt="" loading="lazy"></span>`;
-    return `<span class="avatar${on} ${cls}" style="--av:${color}" aria-hidden="true">${A.esc([...name][0])}</span>`;
+    // data-uid: 접속 상태가 바뀌면 초록 점만 바로 바꿀 수 있게 (A.applyPresence)
+    const uid = m.id ? ` data-uid="${Number(m.id)}"` : '';
+    if (m.av) return `<span class="avatar${on} ${cls}"${uid} aria-hidden="true"><img src="${A.esc(m.av)}" alt="" loading="lazy"></span>`;
+    return `<span class="avatar${on} ${cls}"${uid} style="--av:${color}" aria-hidden="true">${A.esc([...name][0])}</span>`;
+  };
+  /** '● 접속 중' / '오프라인' 글자 (접속 상태가 바뀌면 자동으로 바뀜) */
+  A.presence = (m) =>
+    `<span class="t13" data-presence="${Number(m.id)}" style="color:${m.online ? 'var(--ok)' : 'var(--sub)'}">${m.online ? '● 접속 중' : '오프라인'}</span>`;
+  /**
+   * 접속 중인 사람 목록을 받아 반영: 직원 정보 · 화면에 떠 있는 초록 점 · '접속 중' 글자
+   * 바뀐 사람이 있으면 'a:presence' 이벤트 (대화방 머리글 등이 받아서 다시 그림)
+   */
+  A.applyPresence = (ids) => {
+    if (!A.data || !Array.isArray(ids)) return;
+    const set = new Set(ids.map(Number));
+    const changed = [];
+    for (const m of A.data.members) {
+      const on = set.has(m.id);
+      if (!!m.online !== on) {
+        m.online = on;
+        changed.push(m.id);
+      }
+    }
+    if (A.data.me) A.data.me.online = set.has(A.data.me.id);
+    $$('.avatar[data-uid]').forEach((el) => el.classList.toggle('on', set.has(Number(el.dataset.uid))));
+    $$('[data-presence]').forEach((el) => {
+      const on = set.has(Number(el.dataset.presence));
+      el.textContent = on ? '● 접속 중' : '오프라인';
+      el.style.color = on ? 'var(--ok)' : 'var(--sub)';
+    });
+    if (changed.length) document.dispatchEvent(new CustomEvent('a:presence', { detail: { changed, online: set } }));
   };
   A.mem = (id) => (A.data && A.data.memberMap[id]) || null;
   A.ROLE = { ceo: '대표', lead: '팀장', member: '팀원' };
@@ -894,6 +923,7 @@
     try {
       const d = await A.api('badges');
       A.setBadges(d.badges);
+      A.applyPresence(d.online);
       A.checkVersion(d.version);
     } catch (e) {
       /* 다음에 다시 */
