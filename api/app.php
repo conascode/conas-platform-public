@@ -59,6 +59,7 @@ $routes = [
     // 홈 · 업무
     'home'           => ['GET',  'work'],
     'tasks'          => ['GET',  'work'],
+    'tasks.done'     => ['GET',  'work'],
     'task.save'      => ['POST', 'work'],
     'task.act'       => ['POST', 'work'],
     'project'        => ['GET',  'work'],
@@ -74,6 +75,13 @@ $routes = [
     'notice.confirm' => ['POST', 'notice'],
     'notice.save'    => ['POST', 'notice'],
     'notice.delete'  => ['POST', 'notice'],
+    // 모바일 사원증 바코드 · 리더기
+    'idcard.code'    => ['GET',  'idcard'],
+    'idcard.verify'  => ['POST', 'idcard'],
+    'idcard.scans'   => ['GET',  'idcard'],
+    // 구내식당
+    'meals'          => ['GET',  'meal'],
+    'meal.save'      => ['POST', 'meal'],
     // 근태 (QR은 데모)
     'att'            => ['GET',  'att'],
     'att.check'      => ['POST', 'att'],

@@ -38,7 +38,7 @@
     else fab.innerHTML = `<button class="fab" data-go="cm/write/${B.board}">${ic('pen', 18, 2.2)}글쓰기</button>`;
   }
 
-  /** 목록에는 제목만 (내용 미리보기 없음) */
+  /** 목록에는 제목만 (내용 · 사진 미리보기 없음: 목록을 볼 때 사진을 받지 않아 데이터를 아낌) */
   function postRow(p) {
     return `<button class="post" data-go="cm/post/${p.id}"><div class="post-in"><div class="grow">
       ${p.pinned ? '<span class="tag primary">고정</span>' : ''}
@@ -46,8 +46,8 @@
       <div class="meta"><span>${esc(p.author)} · ${A.ago(p.ts)}</span>
         <span class="lk ${p.likes >= 10 ? 'hot' : ''}">${ic('heart', 13, 2.2)}${p.likes}</span>
         <span class="lk">${ic('comment', 13, 2.2)}${p.comments}</span>
-        ${p.files && !p.thumb ? `<span class="lk">${ic('clip', 13, 2.2)}${p.files}</span>` : ''}
-      </div></div>${p.thumb ? `<img class="thumb" src="${esc(p.thumb)}" alt="" loading="lazy">` : ''}</div></button>`;
+        ${p.files ? `<span class="lk">${ic('clip', 13, 2.2)}${p.files}</span>` : ''}
+      </div></div></div></button>`;
   }
 
   // 화면 틀(제목 · 게시판 버튼)은 처음 한 번만 그리고, 게시판을 옮기면 목록(#boardBody)만 바꿈
@@ -686,6 +686,16 @@
     };
     CH.timer = setTimeout(tick, 3000);
     A.onLeave(() => clearTimeout(CH.timer));
+    // 1:1 대화방: 상대 접속 상태가 바뀌면 머리글 다시 그림
+    const onPresence = (e) => {
+      const o = CH.info && CH.info.other;
+      if (!o || !A.isCurrent('chat') || !e.detail.changed.includes(o.id)) return;
+      o.online = e.detail.online.has(o.id);
+      const who = A.$('.chat-h .chat-who');
+      if (who) who.outerHTML = chatHead(CH.info);
+    };
+    document.addEventListener('a:presence', onPresence);
+    A.onLeave(() => document.removeEventListener('a:presence', onPresence));
   };
 
   async function refreshInfo() {
@@ -1146,7 +1156,7 @@
     A.sheet.show(
       '',
       `<div class="person-h">${A.avatar(m)}<b>${esc(m.name)}</b><p>${esc(A.roleLabel(m))}</p>
-        <span class="t13" style="color:${m.online ? 'var(--ok)' : 'var(--sub)'}">${m.online ? '● 접속 중' : '오프라인'}</span></div>
+        ${A.presence(m)}</div>
       <div class="kv"><span>소속</span><b>${esc(m.team || (m.role === 'ceo' ? 'CONAS' : '소속 없음'))}</b></div>
       <div class="kv"><span>직급 · 직책</span><b>${esc(m.position || '-')} · ${A.ROLE[m.role]}</b></div>
       <div class="kv"><span>이메일</span><b><a href="mailto:${esc(m.email)}">${esc(m.email)}</a></b></div>

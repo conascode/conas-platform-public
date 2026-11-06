@@ -14,7 +14,9 @@
     A.refresh();
   };
 
-  const T = { view: 'mine', showDone: false, data: null };
+  // 완료한 업무: 오늘 완료한 것은 늘 보여주고, 그 전 것은 showDone 일 때만 (기본은 접힘)
+  // older: 지난 완료 업무 (버튼을 눌렀을 때 20개씩 불러옴) { view, list, more, next, loading }
+  const T = { view: 'mine', showDone: false, data: null, older: null };
   /** 완료한 업무 수정 규칙: [선택지 이름, 프로젝트 화면 표시, 설명] */
   const EDIT_DONE = [
     ['수정 불가', '', '완료된 업무는 배정한 사람만 고칠 수 있어요'],
@@ -32,8 +34,10 @@
     const d = await A.api('tasks', { view: T.view });
     if (!alive()) return;
     T.data = d;
+    T.older = null; // 화면을 새로 그릴 때마다 지난 완료 업무는 다시 불러옴
     A.setBadges(d.badges);
     drawTasks(main);
+    if (T.showDone && d.done_older) loadOlder();
     A.$('#fab').innerHTML = `<button class="fab" data-act="task-new">${ic('plus', 18, 2.4)}${me().assignable.length ? '업무 추가' : '할 일 추가'}</button>`;
   };
 
@@ -43,15 +47,19 @@
     return `<span class="st ${A.ddayCls(t.dday)}">${A.ddayLabel(t.dday)}</span>`;
   }
 
-  /** opt.noProject: 프로젝트 화면 안에서는 프로젝트 이름 대신 단계만 */
+  /**
+   * opt.noProject: 프로젝트 화면 안에서는 프로젝트 이름 대신 단계만
+   * opt.owner: 내 업무도 담당자 이름을 보여줌 (프로젝트 화면)
+   */
   function taskRow(t, opt = {}) {
-    const sub = !t.mine ? `${esc(t.assignee)} 담당` : t.assigner_id === me().id ? '직접 등록' : `${esc(t.assigner || '')} 배정`;
+    // 목록에는 담당자만. 누가 배정했는지는 업무 상세에서만 보여줌
+    const sub = !t.mine || opt.owner ? `${esc(t.assignee)} 담당` : '';
     const tag = opt.noProject ? '' : `<span class="tag">${esc(t.project_short || t.project || '개인')}${t.stage && !opt.noStage ? ' · ' + esc(t.stage) : ''}</span>`;
     return `<div class="task ${t.status === 'done' ? 'done' : ''}">
       <button class="tchk ${t.status === 'done' ? 'on' : t.status === 'review' ? 'rv' : ''}" data-act="task" data-id="${t.id}" aria-label="업무 상세">${t.status === 'review' ? ic('clock', 14, 2.6) : ic('check', 14, 3)}</button>
       <button class="task-main" data-act="task" data-id="${t.id}">
         <span class="t15 ellipsis block">${esc(t.title)}</span>
-        <span class="task-meta">${tag}${t.reject_note && t.status === 'todo' ? '<span class="tag danger">반려됨</span>' : ''}<span class="who">${sub}</span></span>
+        <span class="task-meta">${tag}${t.reject_note && t.status === 'todo' ? '<span class="tag danger">반려됨</span>' : ''}${sub ? `<span class="who">${sub}</span>` : ''}</span>
       </button>
       ${stateChip(t)}
     </div>`;
@@ -106,7 +114,7 @@
       <section class="card">
         <div class="card-h"><h3>${T.view === 'mine' ? '내 할 일' : '팀 업무'}</h3><span class="t13 muted">남은 ${open.length}건</span></div>
         ${list || '<div class="empty">남은 업무가 없어요 🎉</div>'}
-        ${finished.length ? `<button class="done-toggle" data-act="task-done-toggle">완료한 업무 ${finished.length}건 ${T.showDone ? '접기' : '보기'}</button>${T.showDone ? finished.map((t) => taskRow(t)).join('') : ''}` : ''}
+        ${doneHtml(finished)}
       </section>
       <section class="card">
         <div class="card-h"><h3>프로젝트</h3>${leader ? `<button class="more" data-act="project-edit">${ic('plus', 14, 2.4)} 새 프로젝트</button>` : `<span class="t13 muted">${d.projects.length}개</span>`}</div>
@@ -133,10 +141,60 @@
     T.view = el.dataset.v;
     A.refresh();
   };
+  /**
+   * 완료한 업무: 오늘 완료한 것은 늘 보여주고,
+   * 그 전 것은 '지난 완료 업무 N건 보기'를 눌렀을 때 최근 것부터 20개씩 (서버에서 그때 받아옴)
+   */
+  function doneHtml(todayList) {
+    const n = T.data.done_older || 0;
+    const o = T.older;
+    let older = '';
+    if (n) {
+      older = `<button class="done-toggle" data-act="task-done-toggle">지난 완료 업무 ${n}건 ${T.showDone ? '접기' : '보기'}</button>`;
+      if (T.showDone) {
+        if (!o || (!o.list.length && o.loading)) older += '<div class="loading" style="padding:16px 0"><div class="spinner"></div></div>';
+        else {
+          older += o.list.map((t) => taskRow(t)).join('');
+          if (o.more) older += `<button class="done-toggle" data-act="task-done-more" ${o.loading ? 'disabled' : ''}>${o.loading ? '불러오는 중…' : `더 보기 (${o.list.length}/${n})`}</button>`;
+        }
+      }
+    }
+    return `${todayList.length ? `<div class="grp">오늘 완료<span>${todayList.length}</span></div>${todayList.map((t) => taskRow(t)).join('')}` : ''}${older}`;
+  }
+  async function loadOlder() {
+    const view = T.view;
+    if (!T.older || T.older.view !== view) T.older = { view, list: [], more: true, next: 0, loading: false };
+    const o = T.older;
+    if (o.loading || !o.more) return;
+    o.loading = true;
+    redrawTasks();
+    try {
+      const r = await A.api('tasks.done', { view, offset: o.next });
+      if (T.older !== o) return; // 그 사이 화면이 바뀜
+      const seen = new Set(o.list.map((t) => t.id));
+      o.list = o.list.concat(r.tasks.filter((t) => !seen.has(t.id)));
+      o.more = r.has_more;
+      o.next = r.next;
+    } catch (e) {
+      A.err(e);
+    }
+    o.loading = false;
+    redrawTasks();
+  }
+  /** 보던 위치 그대로 다시 그리기 */
+  function redrawTasks() {
+    if (!A.isCurrent('ws-task')) return;
+    const main = A.$('#view');
+    const st = main.scrollTop;
+    drawTasks(main);
+    main.scrollTop = st;
+  }
   A.acts['task-done-toggle'] = () => {
     T.showDone = !T.showDone;
-    drawTasks(A.$('#view'));
+    if (T.showDone && (!T.older || T.older.view !== T.view)) loadOlder();
+    else redrawTasks();
   };
+  A.acts['task-done-more'] = () => loadOlder();
 
   // ==================================================================
   // 프로젝트 화면
@@ -157,7 +215,7 @@
     const selStage = sel ? p.stages.find((s) => s.id === sel) : null;
     const ids = new Set(p.stages.map((s) => s.id));
     const noStage = tasks.filter((t) => !t.stage_id || !ids.has(t.stage_id));
-    const rowOpt = { noProject: true };
+    const rowOpt = { noProject: true, owner: true };
 
     // 단계별 업무: 전체 보기면 업무가 있는 단계 + 현재 단계만, 단계를 고르면 그 단계만
     const shown = sel ? p.stages.filter((s) => s.id === sel) : p.stages.filter((s, i) => s.total > 0 || i === cur);
@@ -355,6 +413,7 @@
 
   A.acts['task-new'] = (el) => {
     const projs = projectChoices();
+    // 프로젝트 화면에서 열면 그 프로젝트 · 단계가 골라져 있고, 마감일은 오늘
     const pid = el && el.dataset && el.dataset.project ? Number(el.dataset.project) : null;
     const sid = el && el.dataset ? el.dataset.stage || '' : '';
     const people = me().assignable.map(A.mem).filter(Boolean);
@@ -370,7 +429,7 @@
         </div>
         <p class="hint" id="taskHint" data-rv="${rv ? esc(rv.name + ' ' + A.ROLE[rv.role]) : ''}"></p>
         <div class="field"><label>업무명</label><input name="title" required maxlength="200" placeholder="예: 로그인 화면 개발"></div>
-        <div class="field"><label>마감일</label><input type="date" name="due" value="${A.iso(A.addDays(A.today(), 3))}" required></div>
+        <div class="field"><label>마감일</label><input type="date" name="due" value="${A.iso(pid ? A.today() : A.addDays(A.today(), 3))}" required></div>
         <div class="field"><label>설명 (선택)</label><textarea name="description" placeholder="무엇을, 어디까지 하면 되는지 적어주세요"></textarea></div>
         <button class="btn" type="submit" id="taskBtn">추가하기</button>
       </form>`

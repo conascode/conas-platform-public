@@ -116,6 +116,7 @@
     more: '<circle cx="12" cy="5" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="19" r="1.4" fill="currentColor"/>',
     zoomIn: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5M11 8v6M8 11h6"/>',
     zoomOut: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5M8 11h6"/>',
+    meal: '<path d="M3 12h18a9 9 0 0 1-18 0z"/><path d="M7.5 21h9M13 3.5 10 9M18.5 3.5 14.5 9"/>',
     camera: '<path d="M14.5 4h-5L7.5 6.5H4a2 2 0 0 0-2 2V18a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8.5a2 2 0 0 0-2-2h-3.5z"/><circle cx="12" cy="13" r="3.5"/>',
   };
   const SURF = 'style="stroke:var(--surface)"';
@@ -150,8 +151,37 @@
     const name = m.name || '?';
     const color = A.avatarColor(name);
     const on = m.online ? ' on' : '';
-    if (m.av) return `<span class="avatar${on} ${cls}" aria-hidden="true"><img src="${A.esc(m.av)}" alt="" loading="lazy"></span>`;
-    return `<span class="avatar${on} ${cls}" style="--av:${color}" aria-hidden="true">${A.esc([...name][0])}</span>`;
+    // data-uid: 접속 상태가 바뀌면 초록 점만 바로 바꿀 수 있게 (A.applyPresence)
+    const uid = m.id ? ` data-uid="${Number(m.id)}"` : '';
+    if (m.av) return `<span class="avatar${on} ${cls}"${uid} aria-hidden="true"><img src="${A.esc(m.av)}" alt="" loading="lazy"></span>`;
+    return `<span class="avatar${on} ${cls}"${uid} style="--av:${color}" aria-hidden="true">${A.esc([...name][0])}</span>`;
+  };
+  /** '● 접속 중' / '오프라인' 글자 (접속 상태가 바뀌면 자동으로 바뀜) */
+  A.presence = (m) =>
+    `<span class="t13" data-presence="${Number(m.id)}" style="color:${m.online ? 'var(--ok)' : 'var(--sub)'}">${m.online ? '● 접속 중' : '오프라인'}</span>`;
+  /**
+   * 접속 중인 사람 목록을 받아 반영: 직원 정보 · 화면에 떠 있는 초록 점 · '접속 중' 글자
+   * 바뀐 사람이 있으면 'a:presence' 이벤트 (대화방 머리글 등이 받아서 다시 그림)
+   */
+  A.applyPresence = (ids) => {
+    if (!A.data || !Array.isArray(ids)) return;
+    const set = new Set(ids.map(Number));
+    const changed = [];
+    for (const m of A.data.members) {
+      const on = set.has(m.id);
+      if (!!m.online !== on) {
+        m.online = on;
+        changed.push(m.id);
+      }
+    }
+    if (A.data.me) A.data.me.online = set.has(A.data.me.id);
+    $$('.avatar[data-uid]').forEach((el) => el.classList.toggle('on', set.has(Number(el.dataset.uid))));
+    $$('[data-presence]').forEach((el) => {
+      const on = set.has(Number(el.dataset.presence));
+      el.textContent = on ? '● 접속 중' : '오프라인';
+      el.style.color = on ? 'var(--ok)' : 'var(--sub)';
+    });
+    if (changed.length) document.dispatchEvent(new CustomEvent('a:presence', { detail: { changed, online: set } }));
   };
   A.mem = (id) => (A.data && A.data.memberMap[id]) || null;
   A.ROLE = { ceo: '대표', lead: '팀장', member: '팀원' };
@@ -343,7 +373,7 @@
     let blockClick = false;
     const begin = (y, target) => {
       if (!wrap.classList.contains('swipe') || wrap.classList.contains('closing')) return;
-      if (target.closest('input, textarea, select')) return;
+      if (target.closest('input, textarea, select, .no-swipe')) return;
       const body = $('.sheet-body', wrap);
       if (body.scrollTop > 0 && !target.closest('.sheet-grab, .sheet-head')) return;
       y0 = y;
@@ -893,6 +923,7 @@
     try {
       const d = await A.api('badges');
       A.setBadges(d.badges);
+      A.applyPresence(d.online);
       A.checkVersion(d.version);
     } catch (e) {
       /* 다음에 다시 */

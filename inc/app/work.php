@@ -117,6 +117,7 @@ function task_public(array $t, array $me): array
         'due' => $t['due_date'],
         'dday' => dday($t['due_date']),
         'status' => $t['status'],
+        'done_ts' => $t['status'] === 'done' && $t['done_at'] ? strtotime($t['done_at']) : null,
         'submit_note' => $t['submit_note'],
         'reject_note' => $t['reject_note'],
         'self' => !$needs,
@@ -221,6 +222,7 @@ function api_home(array $me, array $in): array
 
     require_once __DIR__ . '/notice.php';
     $notices = array_slice(notice_list($me), 0, 3);
+    require_once __DIR__ . '/meal.php';
 
     return [
         'att' => $att ? ['in' => $att['check_in'] ? substr($att['check_in'], 0, 5) : null, 'out' => $att['check_out'] ? substr($att['check_out'], 0, 5) : null, 'kind' => $att['kind']] : null,
@@ -231,6 +233,7 @@ function api_home(array $me, array $in): array
         'open_tasks' => count($tasks),
         'first_task' => $tasks ? $tasks[0]['title'] : null,
         'notices' => $notices,
+        'meal' => meal_for_home(),
         'badges' => badges($me),
     ];
 }
@@ -258,30 +261,48 @@ function events_between(array $me, string $from, string $to): array
     ], $rows);
 }
 
-/** 업무 탭: view = mine | team */
+/** 업무 탭에서 볼 업무 조건 (SQL): view = mine | team */
+function tasks_view_sql(array $me, string $view): array
+{
+    if ($view === 'mine') return ['t.assignee_id = ?', [$me['id']]];
+    // 볼 수 있는 프로젝트의 업무 + 내 아래 사람에게 배정된 업무 (남의 개인 할 일은 제외)
+    [$pv, $pvParams] = project_visible_sql($me);
+    $where = "(t.project_id IS NOT NULL AND $pv)";
+    $params = $pvParams;
+    $sub = assignable_ids($me);
+    if ($sub) {
+        $where .= ' OR (t.reviewer_id IS NOT NULL AND t.assignee_id IN (' . in_list($sub) . '))';
+        $params = array_merge($params, $sub);
+    }
+    $where .= ' OR t.assignee_id = ?';
+    $params[] = $me['id'];
+    return ["($where)", $params];
+}
+
+function tasks_view_in(array $me, array $in): string
+{
+    return ($in['view'] ?? 'mine') === 'team' && ($me['role'] !== 'member') ? 'team' : 'mine';
+}
+
+/**
+ * 업무 탭: view = mine | team
+ *  진행 중 업무 전부 + 오늘 완료한 업무만. 그 전에 완료한 업무는 개수만 (목록은 tasks.done 으로 20개씩)
+ */
 function api_tasks(array $me, array $in): array
 {
-    $view = ($in['view'] ?? 'mine') === 'team' && ($me['role'] !== 'member') ? 'team' : 'mine';
+    $view = tasks_view_in($me, $in);
     [$pv, $pvParams] = project_visible_sql($me);
+    [$vw, $vwParams] = tasks_view_sql($me, $view);
 
-    if ($view === 'mine') {
-        $rows = q(task_select() . ' WHERE t.assignee_id = ? ORDER BY t.due_date, t.id', [$me['id']])->fetchAll();
-    } else {
-        // 볼 수 있는 프로젝트의 업무 + 내 아래 사람에게 배정된 업무 (남의 개인 할 일은 제외)
-        $sub = assignable_ids($me);
-        $where = "(t.project_id IS NOT NULL AND $pv)";
-        $params = $pvParams;
-        if ($sub) {
-            $where .= ' OR (t.reviewer_id IS NOT NULL AND t.assignee_id IN (' . in_list($sub) . '))';
-            $params = array_merge($params, $sub);
-        }
-        $where .= ' OR t.assignee_id = ?';
-        $params[] = $me['id'];
-        $rows = q(task_select() . " WHERE $where ORDER BY t.due_date, t.id", $params)->fetchAll();
-    }
-    // 완료된 업무는 최근 60일만
-    $cut = date('Y-m-d', strtotime('-60 days'));
-    $rows = array_filter($rows, fn($t) => $t['status'] !== 'done' || substr((string)$t['done_at'], 0, 10) >= $cut || $t['due_date'] >= $cut);
+    $rows = q(
+        task_select() . " WHERE $vw AND (t.status <> 'done' OR t.done_at >= CURDATE()) ORDER BY t.due_date, t.id",
+        $vwParams
+    )->fetchAll();
+    $doneOlder = (int)q(
+        "SELECT COUNT(*) FROM in_tasks t LEFT JOIN in_projects p ON p.id = t.project_id
+          WHERE $vw AND t.status = 'done' AND (t.done_at IS NULL OR t.done_at < CURDATE())",
+        $vwParams
+    )->fetchColumn();
 
     // 검토 요청함
     $reviewIds = review_queue_ids($me);
@@ -302,6 +323,7 @@ function api_tasks(array $me, array $in): array
     return [
         'view' => $view,
         'tasks' => array_values(array_map(fn($t) => task_public($t, $me), $rows)),
+        'done_older' => $doneOlder,
         'reviews' => array_map(fn($t) => task_public($t, $me), $reviews),
         'projects' => array_map(fn($p) => project_info($p, $me), $projects),
         'deadlines' => array_map(fn($d) => [
@@ -311,6 +333,25 @@ function api_tasks(array $me, array $in): array
         'default_stages' => STAGES,
         'can_manage' => can_manage_company($me),
         'badges' => badges($me),
+    ];
+}
+
+/** 업무 탭: 오늘 전에 완료한 업무, 최근에 완료한 것부터 20개씩 (offset 으로 이어서) */
+function api_tasks_done(array $me, array $in): array
+{
+    $view = tasks_view_in($me, $in);
+    [$vw, $vwParams] = tasks_view_sql($me, $view);
+    $offset = max(0, int_in($in, 'offset'));
+    $rows = q(
+        task_select() . " WHERE $vw AND t.status = 'done' AND (t.done_at IS NULL OR t.done_at < CURDATE())
+          ORDER BY t.done_at IS NULL, t.done_at DESC, t.id DESC LIMIT 21 OFFSET $offset",
+        $vwParams
+    )->fetchAll();
+    $more = count($rows) > 20;
+    return [
+        'tasks' => array_map(fn($t) => task_public($t, $me), array_slice($rows, 0, 20)),
+        'has_more' => $more,
+        'next' => $offset + 20,
     ];
 }
 
