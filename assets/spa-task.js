@@ -14,8 +14,8 @@
     A.refresh();
   };
 
-  // showDone: 완료한 업무를 처음부터 펼쳐서 보여줌 (접기 버튼으로 숨길 수 있음)
-  const T = { view: 'mine', showDone: true, data: null };
+  // 완료한 업무: 오늘 완료한 것은 늘 보여주고, 그 전 것은 showDone 일 때만 (기본은 접힘)
+  const T = { view: 'mine', showDone: false, data: null };
   /** 완료한 업무 수정 규칙: [선택지 이름, 프로젝트 화면 표시, 설명] */
   const EDIT_DONE = [
     ['수정 불가', '', '완료된 업무는 배정한 사람만 고칠 수 있어요'],
@@ -111,7 +111,7 @@
       <section class="card">
         <div class="card-h"><h3>${T.view === 'mine' ? '내 할 일' : '팀 업무'}</h3><span class="t13 muted">남은 ${open.length}건</span></div>
         ${list || '<div class="empty">남은 업무가 없어요 🎉</div>'}
-        ${finished.length ? `<button class="done-toggle" data-act="task-done-toggle">완료한 업무 ${finished.length}건 ${T.showDone ? '접기' : '보기'}</button>${T.showDone ? finished.map((t) => taskRow(t)).join('') : ''}` : ''}
+        ${doneHtml(finished)}
       </section>
       <section class="card">
         <div class="card-h"><h3>프로젝트</h3>${leader ? `<button class="more" data-act="project-edit">${ic('plus', 14, 2.4)} 새 프로젝트</button>` : `<span class="t13 muted">${d.projects.length}개</span>`}</div>
@@ -138,6 +138,16 @@
     T.view = el.dataset.v;
     A.refresh();
   };
+  /** 완료한 업무: 오늘 완료한 것 + '지난 완료 업무 N건 보기' */
+  function doneHtml(finished) {
+    if (!finished.length) return '';
+    const today = A.iso(A.today());
+    const isToday = (t) => t.done_ts && A.iso(new Date(t.done_ts * 1000)) === today;
+    const todayList = finished.filter(isToday);
+    const older = finished.filter((t) => !isToday(t));
+    return `${todayList.length ? `<div class="grp">오늘 완료<span>${todayList.length}</span></div>${todayList.map((t) => taskRow(t)).join('')}` : ''}
+      ${older.length ? `<button class="done-toggle" data-act="task-done-toggle">지난 완료 업무 ${older.length}건 ${T.showDone ? '접기' : '보기'}</button>${T.showDone ? older.map((t) => taskRow(t)).join('') : ''}` : ''}`;
+  }
   A.acts['task-done-toggle'] = () => {
     T.showDone = !T.showDone;
     drawTasks(A.$('#view'));

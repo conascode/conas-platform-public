@@ -117,6 +117,7 @@ function task_public(array $t, array $me): array
         'due' => $t['due_date'],
         'dday' => dday($t['due_date']),
         'status' => $t['status'],
+        'done_ts' => $t['status'] === 'done' && $t['done_at'] ? strtotime($t['done_at']) : null,
         'submit_note' => $t['submit_note'],
         'reject_note' => $t['reject_note'],
         'self' => !$needs,
