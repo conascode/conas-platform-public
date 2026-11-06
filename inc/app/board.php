@@ -41,8 +41,7 @@ function api_posts(array $me, array $in): array
         "SELECT p.id, p.user_id, p.is_anonymous, p.title, p.body, p.is_pinned, p.view_count, UNIX_TIMESTAMP(p.created_at) AS ts,
                 (SELECT COUNT(*) FROM in_comments c WHERE c.post_id = p.id AND c.deleted_at IS NULL) AS comments,
                 (SELECT COUNT(*) FROM in_post_likes l WHERE l.post_id = p.id) AS likes,
-                (SELECT COUNT(*) FROM in_attachments a WHERE a.post_id = p.id) AS files,
-                (SELECT a.id FROM in_attachments a WHERE a.post_id = p.id AND a.mime_type IN ('image/jpeg','image/png','image/gif','image/webp') ORDER BY a.id LIMIT 1) AS thumb_id
+                (SELECT COUNT(*) FROM in_attachments a WHERE a.post_id = p.id) AS files
            FROM in_posts p
           WHERE $where
           ORDER BY " . ($before > 0 || $search !== '' ? '' : 'p.is_pinned DESC, ') . "p.id DESC
@@ -67,7 +66,6 @@ function api_posts(array $me, array $in): array
             'comments' => (int)$r['comments'],
             'likes' => (int)$r['likes'],
             'files' => (int)$r['files'],
-            'thumb' => $r['thumb_id'] ? url('download.php?id=' . (int)$r['thumb_id'] . '&inline=1') : null,
         ];
     }
     return [
@@ -244,17 +242,25 @@ function api_comment_add(array $me, array $in): array
     if ($body === '') fail('댓글 내용을 입력해 주세요.');
     $parent = int_in($in, 'parent_id') ?: null;
     if ($parent) {
-        $pc = q('SELECT id, parent_id FROM in_comments WHERE id = ? AND post_id = ?', [$parent, (int)$p['id']])->fetch();
+        $pc = q('SELECT id, parent_id, user_id FROM in_comments WHERE id = ? AND post_id = ?', [$parent, (int)$p['id']])->fetch();
         if (!$pc) fail('답글을 달 댓글을 찾을 수 없어요.');
         // 답글은 한 단계까지
         if ($pc['parent_id'] !== null) $parent = (int)$pc['parent_id'];
     }
     q('INSERT INTO in_comments (post_id, parent_id, user_id, body) VALUES (?, ?, ?, ?)', [(int)$p['id'], $parent, $me['id'], $body]);
 
-    // 글쓴이에게 알림 (익명 글이면 댓글 단 사람 이름은 숨김)
+    // 알림 (익명 게시판이어도 이름이 드러나지 않게 이름은 넣지 않음)
+    $title = mb_strimwidth($p['title'], 0, 60, '…');
+    $link = '/cm/post/' . (int)$p['id'];
     $author = $p['user_id'] === null ? null : (int)$p['user_id'];
-    if ($author && $author !== $me['id']) {
-        notify($author, 'comment', '내 글에 댓글이 달렸어요', mb_strimwidth($p['title'], 0, 60, '…'), '/cm/post/' . (int)$p['id']);
+    // 답글이면: 답글을 받은 댓글을 쓴 사람에게 (글쓴이와 같은 사람이면 이 알림 하나만)
+    $replyTo = $parent && $pc && $pc['user_id'] !== null ? (int)$pc['user_id'] : null;
+    if ($replyTo && $replyTo !== $me['id']) {
+        notify($replyTo, 'comment', '내 댓글에 답글이 달렸어요', $title, $link);
+    }
+    // 글쓴이에게
+    if ($author && $author !== $me['id'] && $author !== $replyTo) {
+        notify($author, 'comment', '내 글에 댓글이 달렸어요', $title, $link);
     }
     return api_post($me, ['id' => (int)$p['id'], 'no_view' => 1]);
 }

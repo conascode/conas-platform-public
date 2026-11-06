@@ -38,7 +38,7 @@
     else fab.innerHTML = `<button class="fab" data-go="cm/write/${B.board}">${ic('pen', 18, 2.2)}글쓰기</button>`;
   }
 
-  /** 목록에는 제목만 (내용 미리보기 없음) */
+  /** 목록에는 제목만 (내용 · 사진 미리보기 없음: 목록을 볼 때 사진을 받지 않아 데이터를 아낌) */
   function postRow(p) {
     return `<button class="post" data-go="cm/post/${p.id}"><div class="post-in"><div class="grow">
       ${p.pinned ? '<span class="tag primary">고정</span>' : ''}
@@ -46,8 +46,8 @@
       <div class="meta"><span>${esc(p.author)} · ${A.ago(p.ts)}</span>
         <span class="lk ${p.likes >= 10 ? 'hot' : ''}">${ic('heart', 13, 2.2)}${p.likes}</span>
         <span class="lk">${ic('comment', 13, 2.2)}${p.comments}</span>
-        ${p.files && !p.thumb ? `<span class="lk">${ic('clip', 13, 2.2)}${p.files}</span>` : ''}
-      </div></div>${p.thumb ? `<img class="thumb" src="${esc(p.thumb)}" alt="" loading="lazy">` : ''}</div></button>`;
+        ${p.files ? `<span class="lk">${ic('clip', 13, 2.2)}${p.files}</span>` : ''}
+      </div></div></div></button>`;
   }
 
   // 화면 틀(제목 · 게시판 버튼)은 처음 한 번만 그리고, 게시판을 옮기면 목록(#boardBody)만 바꿈
