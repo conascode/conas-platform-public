@@ -9,7 +9,7 @@ const DB_PASS = '';
 
 const APP_NAME       = 'CONAS 사내';
 const APP_SHORT_NAME = 'CONAS';
-const APP_VERSION    = '2.0.14-dev1';
+const APP_VERSION    = '2.0.15-dev1';
 const BASE_PATH      = '/in';
 const THEME_COLOR    = '#2f5bea';
 

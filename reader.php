@@ -33,6 +33,9 @@ button, input { font: inherit; color: inherit; }
 .wrap { max-width: 720px; margin: 0 auto; min-height: 100%; display: flex; flex-direction: column; gap: 14px; padding: max(16px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom)); }
 header { display: flex; align-items: center; gap: 10px; }
 header img { width: 30px; height: 30px; }
+.back { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; margin-left: -8px; border-radius: 12px; color: #fff; text-decoration: none; }
+.back:active { background: rgba(255,255,255,.1); }
+.back svg { width: 24px; height: 24px; }
 header b { font-size: 19px; font-weight: 800; }
 header span { margin-left: auto; font-size: 13px; color: var(--sub); }
 .panel { position: relative; flex: 1; min-height: 330px; border-radius: 22px; background: var(--card); border: 2px solid var(--line); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px; transition: border-color .2s, background .2s; overflow: hidden; }
@@ -71,7 +74,10 @@ video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cov
 </head>
 <body>
 <div class="wrap">
-  <header><img src="<?= e(url('assets/conas-mark.svg')) ?>" alt=""><b>사원증 리더기</b><span><?= e($u['name']) ?></span></header>
+  <header>
+    <a class="back" href="<?= e(url('') . '#/all') ?>" aria-label="돌아가기" title="돌아가기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></a>
+    <img src="<?= e(url('assets/conas-mark.svg')) ?>" alt=""><b>사원증 리더기</b><span><?= e($u['name']) ?></span>
+  </header>
 <?php if (!$allowed): ?>
   <p class="deny">사원증 리더기는 대표나 관리자만 쓸 수 있어요.<br><a href="<?= e(url('')) ?>">앱으로 돌아가기</a></p>
 <?php else: ?>
@@ -83,6 +89,7 @@ video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cov
   </form>
   <p class="hint">USB · 블루투스 바코드 리더기는 이 화면을 열어 두고 바로 찍으면 돼요. 휴대폰은 <b>카메라</b>를 눌러 사원증 바코드를 비춰 주세요. 코드는 30초마다 바뀌어서, 캡처한 화면은 금방 '만료'로 나와요.</p>
   <section class="recent"><h3>최근 확인</h3><ul id="recent"></ul></section>
+  <a class="btn ghost" href="<?= e(url('') . '#/all') ?>" style="display:flex;align-items:center;justify-content:center;text-decoration:none">앱으로 돌아가기</a>
 <?php endif; ?>
 </div>
 <?php if ($allowed): ?>
@@ -255,6 +262,7 @@ video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cov
     input.focus();
   }
   $('#camBtn').addEventListener('click', () => (camOn ? stopCam() : startCam()));
+  window.addEventListener('pagehide', () => { if (stream) stream.getTracks().forEach((t) => t.stop()); });
 
   idle();
   api('idcard.scans').then((d) => drawRecent(d.recent)).catch(() => drawRecent([]));
