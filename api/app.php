@@ -59,6 +59,7 @@ $routes = [
     // 홈 · 업무
     'home'           => ['GET',  'work'],
     'tasks'          => ['GET',  'work'],
+    'tasks.done'     => ['GET',  'work'],
     'task.save'      => ['POST', 'work'],
     'task.act'       => ['POST', 'work'],
     'project'        => ['GET',  'work'],

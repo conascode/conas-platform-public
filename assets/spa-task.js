@@ -15,7 +15,8 @@
   };
 
   // 완료한 업무: 오늘 완료한 것은 늘 보여주고, 그 전 것은 showDone 일 때만 (기본은 접힘)
-  const T = { view: 'mine', showDone: false, data: null };
+  // older: 지난 완료 업무 (버튼을 눌렀을 때 20개씩 불러옴) { view, list, more, next, loading }
+  const T = { view: 'mine', showDone: false, data: null, older: null };
   /** 완료한 업무 수정 규칙: [선택지 이름, 프로젝트 화면 표시, 설명] */
   const EDIT_DONE = [
     ['수정 불가', '', '완료된 업무는 배정한 사람만 고칠 수 있어요'],
@@ -33,8 +34,10 @@
     const d = await A.api('tasks', { view: T.view });
     if (!alive()) return;
     T.data = d;
+    T.older = null; // 화면을 새로 그릴 때마다 지난 완료 업무는 다시 불러옴
     A.setBadges(d.badges);
     drawTasks(main);
+    if (T.showDone && d.done_older) loadOlder();
     A.$('#fab').innerHTML = `<button class="fab" data-act="task-new">${ic('plus', 18, 2.4)}${me().assignable.length ? '업무 추가' : '할 일 추가'}</button>`;
   };
 
@@ -138,20 +141,60 @@
     T.view = el.dataset.v;
     A.refresh();
   };
-  /** 완료한 업무: 오늘 완료한 것 + '지난 완료 업무 N건 보기' */
-  function doneHtml(finished) {
-    if (!finished.length) return '';
-    const today = A.iso(A.today());
-    const isToday = (t) => t.done_ts && A.iso(new Date(t.done_ts * 1000)) === today;
-    const todayList = finished.filter(isToday);
-    const older = finished.filter((t) => !isToday(t));
-    return `${todayList.length ? `<div class="grp">오늘 완료<span>${todayList.length}</span></div>${todayList.map((t) => taskRow(t)).join('')}` : ''}
-      ${older.length ? `<button class="done-toggle" data-act="task-done-toggle">지난 완료 업무 ${older.length}건 ${T.showDone ? '접기' : '보기'}</button>${T.showDone ? older.map((t) => taskRow(t)).join('') : ''}` : ''}`;
+  /**
+   * 완료한 업무: 오늘 완료한 것은 늘 보여주고,
+   * 그 전 것은 '지난 완료 업무 N건 보기'를 눌렀을 때 최근 것부터 20개씩 (서버에서 그때 받아옴)
+   */
+  function doneHtml(todayList) {
+    const n = T.data.done_older || 0;
+    const o = T.older;
+    let older = '';
+    if (n) {
+      older = `<button class="done-toggle" data-act="task-done-toggle">지난 완료 업무 ${n}건 ${T.showDone ? '접기' : '보기'}</button>`;
+      if (T.showDone) {
+        if (!o || (!o.list.length && o.loading)) older += '<div class="loading" style="padding:16px 0"><div class="spinner"></div></div>';
+        else {
+          older += o.list.map((t) => taskRow(t)).join('');
+          if (o.more) older += `<button class="done-toggle" data-act="task-done-more" ${o.loading ? 'disabled' : ''}>${o.loading ? '불러오는 중…' : `더 보기 (${o.list.length}/${n})`}</button>`;
+        }
+      }
+    }
+    return `${todayList.length ? `<div class="grp">오늘 완료<span>${todayList.length}</span></div>${todayList.map((t) => taskRow(t)).join('')}` : ''}${older}`;
+  }
+  async function loadOlder() {
+    const view = T.view;
+    if (!T.older || T.older.view !== view) T.older = { view, list: [], more: true, next: 0, loading: false };
+    const o = T.older;
+    if (o.loading || !o.more) return;
+    o.loading = true;
+    redrawTasks();
+    try {
+      const r = await A.api('tasks.done', { view, offset: o.next });
+      if (T.older !== o) return; // 그 사이 화면이 바뀜
+      const seen = new Set(o.list.map((t) => t.id));
+      o.list = o.list.concat(r.tasks.filter((t) => !seen.has(t.id)));
+      o.more = r.has_more;
+      o.next = r.next;
+    } catch (e) {
+      A.err(e);
+    }
+    o.loading = false;
+    redrawTasks();
+  }
+  /** 보던 위치 그대로 다시 그리기 */
+  function redrawTasks() {
+    if (!A.isCurrent('ws-task')) return;
+    const main = A.$('#view');
+    const st = main.scrollTop;
+    drawTasks(main);
+    main.scrollTop = st;
   }
   A.acts['task-done-toggle'] = () => {
     T.showDone = !T.showDone;
-    drawTasks(A.$('#view'));
+    if (T.showDone && (!T.older || T.older.view !== T.view)) loadOlder();
+    else redrawTasks();
   };
+  A.acts['task-done-more'] = () => loadOlder();
 
   // ==================================================================
   // 프로젝트 화면
