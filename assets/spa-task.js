@@ -14,7 +14,8 @@
     A.refresh();
   };
 
-  const T = { view: 'mine', showDone: false, data: null };
+  // showDone: 완료한 업무를 처음부터 펼쳐서 보여줌 (접기 버튼으로 숨길 수 있음)
+  const T = { view: 'mine', showDone: true, data: null };
   /** 완료한 업무 수정 규칙: [선택지 이름, 프로젝트 화면 표시, 설명] */
   const EDIT_DONE = [
     ['수정 불가', '', '완료된 업무는 배정한 사람만 고칠 수 있어요'],
@@ -43,10 +44,13 @@
     return `<span class="st ${A.ddayCls(t.dday)}">${A.ddayLabel(t.dday)}</span>`;
   }
 
-  /** opt.noProject: 프로젝트 화면 안에서는 프로젝트 이름 대신 단계만 */
+  /**
+   * opt.noProject: 프로젝트 화면 안에서는 프로젝트 이름 대신 단계만
+   * opt.owner: 내 업무도 담당자 이름을 보여줌 (프로젝트 화면)
+   */
   function taskRow(t, opt = {}) {
-    // 목록(업무 탭 · 프로젝트)에는 담당자만. 누가 배정했는지는 업무 상세에서만 보여줌
-    const sub = !t.mine ? `${esc(t.assignee)} 담당` : '';
+    // 목록에는 담당자만. 누가 배정했는지는 업무 상세에서만 보여줌
+    const sub = !t.mine || opt.owner ? `${esc(t.assignee)} 담당` : '';
     const tag = opt.noProject ? '' : `<span class="tag">${esc(t.project_short || t.project || '개인')}${t.stage && !opt.noStage ? ' · ' + esc(t.stage) : ''}</span>`;
     return `<div class="task ${t.status === 'done' ? 'done' : ''}">
       <button class="tchk ${t.status === 'done' ? 'on' : t.status === 'review' ? 'rv' : ''}" data-act="task" data-id="${t.id}" aria-label="업무 상세">${t.status === 'review' ? ic('clock', 14, 2.6) : ic('check', 14, 3)}</button>
@@ -158,7 +162,7 @@
     const selStage = sel ? p.stages.find((s) => s.id === sel) : null;
     const ids = new Set(p.stages.map((s) => s.id));
     const noStage = tasks.filter((t) => !t.stage_id || !ids.has(t.stage_id));
-    const rowOpt = { noProject: true };
+    const rowOpt = { noProject: true, owner: true };
 
     // 단계별 업무: 전체 보기면 업무가 있는 단계 + 현재 단계만, 단계를 고르면 그 단계만
     const shown = sel ? p.stages.filter((s) => s.id === sel) : p.stages.filter((s, i) => s.total > 0 || i === cur);
