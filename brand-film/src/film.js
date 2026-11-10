@@ -10,6 +10,8 @@ import { createBuilding, TOWER } from './building.js';
 import { createNetwork } from './network.js';
 import { createGlobe } from './globe.js';
 import { createPost } from './post.js';
+import { createChamber } from './chamber.js';
+import { createDatascape } from './datascape.js';
 
 const W = 1920, H = 1080;
 
@@ -36,6 +38,8 @@ renderer.setSize(W, H, false);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const scene = new THREE.Scene();
 scene.background = COLORS.bg.clone();
@@ -45,7 +49,25 @@ const camera = new THREE.PerspectiveCamera(35, W / H, 0.05, 4000);
 
 const key = new THREE.DirectionalLight('#dfe7f2', 1.1);
 key.position.set(-30, 60, 40);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.bias = -0.0004;
+key.shadow.normalBias = 0.02;
 scene.add(key);
+scene.add(key.target);
+// Shadow setups per environment: [light position, target, ortho half-size, near, far]
+const SHADOW = {
+  stage: { pos: new THREE.Vector3(-4, 7, 7), target: new THREE.Vector3(0, 0, -2), half: 8, near: 1, far: 30 },
+  hq: { pos: new THREE.Vector3(-160, 300, 180), target: new THREE.Vector3(0, 60, 0), half: 160, near: 50, far: 900 },
+};
+function setShadow(cfg) {
+  key.position.copy(cfg.pos);
+  key.target.position.copy(cfg.target);
+  const c = key.shadow.camera;
+  c.left = -cfg.half; c.right = cfg.half; c.top = cfg.half; c.bottom = -cfg.half; c.near = cfg.near; c.far = cfg.far;
+  c.updateProjectionMatrix();
+  key.target.updateMatrixWorld();
+}
 const rimLight = new THREE.DirectionalLight('#6f9fff', 0.5);
 rimLight.position.set(40, 20, -60);
 scene.add(rimLight);
@@ -60,7 +82,10 @@ scene.add(stage);
 const SYM_SCALE = 0.78;
 const symbol = createSymbol(lib);
 symbol.group.scale.setScalar(SYM_SCALE);
+symbol.group.traverse((o) => { if (o.isMesh) o.castShadow = o.receiveShadow = true; });
 stage.add(symbol.group);
+const chamber = createChamber(lib);
+stage.add(chamber.group);
 
 const centerGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: pointGlow, color: new THREE.Color('#d6e4ff'), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 }));
 stage.add(centerGlow);
@@ -109,7 +134,7 @@ const pMat = new THREE.ShaderMaterial({
       s.xz = mat2(cos(ang), -sin(ang), sin(ang), cos(ang)) * s.xz;
       vec3 p = mix(s, aTarget, k);
       vec4 mv = modelViewMatrix * vec4(p, 1.0);
-      gl_PointSize = max(1.0, aSeed.y * uScale / -mv.z);
+      gl_PointSize = clamp(aSeed.y * uScale / -mv.z, 1.0, 36.0);
       float born = smoothstep(0.0, 0.5, uT - aSeed.x * 0.5);
       float gone = 1.0 - smoothstep(2.0, 2.75, uT - aSeed.x * 0.15);
       float spark = 0.75 + 0.25 * sin(uT * 9.0 + aSeed.z * 40.0);
@@ -140,6 +165,7 @@ globe.group.position.set(-6, -78, -92);
 net.group.add(globe.group);
 
 const post = createPost(renderer, scene, camera, W, H);
+let datascape = null; // built after the camera functions exist (it follows the camera path)
 
 // ---------------------------------------------------------------- DOM text
 const $ = (id) => document.getElementById(id);
@@ -213,7 +239,15 @@ function orbit(target, r, theta, phi) {
     target.z + r * Math.cos(phi) * Math.cos(theta),
   );
 }
-const STAGE_TARGET = new THREE.Vector3(0, -0.5, 0);
+const STAGE_TARGET = new THREE.Vector3(0, -0.6, 0);
+const CAM1_POS = new THREE.CatmullRomCurve3([
+  new THREE.Vector3(2.75, 1.15, -1.05), new THREE.Vector3(2.55, 1.0, 0.6), new THREE.Vector3(1.2, 0.55, 3.2),
+  new THREE.Vector3(-0.9, 0.0, 6.4), new THREE.Vector3(0, -0.6, 9.3),
+], false, 'centripetal');
+const CAM1_LOOK = new THREE.CatmullRomCurve3([
+  new THREE.Vector3(2.3, 0.82, -2.4), new THREE.Vector3(1.7, 0.6, -2.0), new THREE.Vector3(0.6, 0.0, -0.8),
+  new THREE.Vector3(0, -0.45, 0), new THREE.Vector3(0, -0.6, 0),
+], false, 'centripetal');
 const NET_T1 = () => N0.clone().add(new THREE.Vector3(1.6, -4.9, 4.0));
 const NET_T2 = () => N0.clone().add(new THREE.Vector3(-2, -10, -40));
 const H_WORLD = () => N0.clone().add(net.byId.H.home);
@@ -221,19 +255,16 @@ const H_WORLD = () => N0.clone().add(net.byId.H.home);
 function cameraAt(t) {
   let pos, target;
   if (t < T.dollyIn) {
-    // Scene 01: slow dolly in with a slight orbital drift around the forming structure.
-    const k = ease.inOutSine(prog(t, 0, T.dollyIn));
-    const d = lerp(10.6, 7.7, k);
-    const th = 0.16 * (1 - ease.inOutSine(prog(t, 0, 2.4))) + 0.06 * Math.sin(Math.PI * prog(t, 1.2, 2.7));
-    const ph = 0.06 * (1 - k);
-    target = STAGE_TARGET.clone();
-    pos = orbit(new THREE.Vector3(0, 0, 0), d, th, ph);
-    pos.y += target.y;
+    // Scene 01: macro dolly on the meshing gear teeth, tracking through the bearings and
+    // rings, then an orbital move that lands square on the assembled mark.
+    const u = ease.inOutSine(prog(t, 0, T.dollyIn));
+    pos = CAM1_POS.getPoint(u);
+    target = CAM1_LOOK.getPoint(u);
   } else if (t < T.cut1) {
     // Dolly through the core.
     const k = ease.inExpo(prog(t, T.dollyIn, T.cut1));
-    const d = lerp(7.7, 0.55, k);
-    target = new THREE.Vector3(0, lerp(-0.5, 0, k), 0);
+    const d = lerp(9.3, 0.55, k);
+    target = new THREE.Vector3(0, lerp(-0.6, 0, k), 0);
     pos = new THREE.Vector3(0, target.y, d);
   } else if (t < T.craneEnd) {
     // Scene 02: crane up the tower with a slow orbit, ending square on the rooftop sign.
@@ -241,7 +272,7 @@ function cameraAt(t) {
     const e = ease.inOutCubic(k);
     const eo = ease.outCubic(k);
     const th = lerp(0.52, 0, ease.inOutSine(k));
-    const r = lerp(84, 46.25, eo);
+    const r = lerp(92, 46.25, eo);
     pos = new THREE.Vector3(Math.sin(th) * r, lerp(3, LOGO.y, e), LOGO.z + Math.cos(th) * r);
     target = new THREE.Vector3(0, lerp(46, LOGO.y, ease.inOutCubic(clamp(k * 1.04))), lerp(0, LOGO.z, e));
   } else if (t < T.pushEnd) {
@@ -276,11 +307,20 @@ function cameraAt(t) {
   } else {
     // Signature: settle, then hold almost still for the last second.
     const k = ease.outQuint(prog(t, T.cut2, 14.0));
-    const d = lerp(8.8, 7.75, k) - 0.08 * prog(t, 14.0, 15.0);
+    const d = lerp(11.2, 9.3, k) - 0.1 * prog(t, 14.0, 15.0);
     target = STAGE_TARGET.clone();
-    pos = new THREE.Vector3(0, target.y, d);
+    pos = orbit(new THREE.Vector3(0, target.y, 0), d, lerp(-0.32, 0, k) - 0.01 * prog(t, 14, 15), lerp(0.12, 0, k));
   }
   return { pos, target };
+}
+
+// datascape (needs cameraAt for the tunnel + cube clearance)
+{
+  const local = (tt) => cameraAt(tt).pos.sub(N0);
+  const avoidPath = [];
+  for (let tt = 6.3; tt < 12.6; tt += 0.05) avoidPath.push(local(tt));
+  datascape = createDatascape(lib, net.nodes, { avoidPath, cameraPathFn: local, globeCenter: globe.group.position.clone(), globeRadius: 62 });
+  net.group.add(datascape.group);
 }
 
 // ---------------------------------------------------------------- per-time state
@@ -292,6 +332,7 @@ function setState(t) {
 
   // camera
   const { pos, target } = cameraAt(t);
+  const targetRef = target;
   camera.position.copy(pos);
   camera.lookAt(target);
   camera.updateMatrixWorld();
@@ -304,7 +345,9 @@ function setState(t) {
   else envRot = lerp(-0.9, 0.25, ease.outCubic(prog(t, T.cut2, 14.3)));
   scene.environmentRotation.set(0, envRot, 0);
   scene.environmentIntensity = 1.0;
-  key.intensity = inStage ? 2.4 : inHQ ? 1.0 : 0.25;
+  if (!inStage) { key.intensity = inHQ ? 1.0 : 0.25; rimLight.intensity = 0.5; }
+  if (inHQ) setShadow(SHADOW.hq);
+  key.castShadow = inStage || inHQ;
 
   // ---------- stage (symbol) ----------
   stage.visible = inStage;
@@ -319,8 +362,9 @@ function setState(t) {
       pMat.uniforms.uOpacity.value = 1;
       const g0 = ease.outCubic(prog(t, 0.0, 0.45)) * (1 - 0.7 * prog(t, 0.6, 1.4)) * (1 - prog(t, 1.6, 2.4));
       centerGlow.material.opacity = 0.9 * g0;
-      centerGlow.scale.setScalar(lerp(0.25, 1.3, prog(t, 0, 1.2)));
-      haze.material.opacity = 0.22 * prog(t, 0.3, 2.0);
+      centerGlow.scale.setScalar(lerp(0.12, 0.7, prog(t, 0, 1.2)));
+      centerGlow.position.copy(CAM1_LOOK.getPoint(0)); // first light glints on the meshing teeth
+      haze.material.opacity = 0.1 * prog(t, 0.3, 2.0);
       symbol.sweep.uSwPos.value = lerp(-1.4, 1.4, ease.inOutSine(prog(t, 1.5, 2.15)));
       symbol.sweep.uSwAmt.value = window4(t, 1.45, 1.6, 2.05, 2.2);
     } else {
@@ -332,7 +376,8 @@ function setState(t) {
       pMat.uniforms.uOpacity.value = 0.8;
       centerGlow.material.opacity = 1.0 * (1 - ease.outCubic(prog(t, T.cut2, 13.55)));
       centerGlow.scale.setScalar(lerp(4, 1.2, prog(t, T.cut2, 13.55)));
-      haze.material.opacity = 0.22;
+      centerGlow.position.set(0, 0, 0.3);
+      haze.material.opacity = 0.1;
       symbol.sweep.uSwPos.value = lerp(-1.4, 1.4, ease.inOutSine(prog(t, 13.4, 14.0)));
       symbol.sweep.uSwAmt.value = window4(t, 13.35, 13.5, 13.9, 14.05);
     }
@@ -340,6 +385,23 @@ function setState(t) {
     symbol.sweep.uSwWidth.value = 0.03;
     const H = renderer.getDrawingBufferSize(new THREE.Vector2()).y;
     pMat.uniforms.uScale.value = H * 0.5 / Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+  }
+
+  if (inStage) {
+    const light = final ? 1 : ease.inOutSine(prog(t, 0.05, 1.1));
+    chamber.update(t, {
+      visible: true,
+      assemble: final ? ease.outCubic(prog(t, T.cut2, 13.6)) : prog(t, 0.6, 2.25),
+      spread: final ? 0.35 : 1,
+      light,
+      dim: final ? 1 : 0,
+    });
+    scene.environmentIntensity = light;
+    key.intensity = 2.2 * light;
+    rimLight.intensity = 0.5 * light;
+    setShadow(SHADOW.stage);
+  } else {
+    chamber.update(t, { visible: false });
   }
 
   // ---------- HQ ----------
@@ -365,6 +427,10 @@ function setState(t) {
     hq.sky.material.uniforms.uOpacity.value = 1 - prog(t, 6.1, 6.7);
     // The camera is square on the façade from 6.2s; the city, ground and podium are out of frame.
     hq.ground.visible = hq.city.visible = t < 6.25;
+    hq.plaza.forEach((m) => { m.visible = t < 6.25; });
+    hq.clouds.visible = t < 6.0;
+    hq.mastLights.forEach((l, i) => { l.visible = Math.sin(t * 3.2 + i * 0.7) > 0.2; });
+    hq.beams.forEach((b) => { b.visible = t < 6.25; b.material.uniforms.uT.value = t; b.material.uniforms.uI.value = 0.11 * prog(t, 3.3, 3.9); });
   }
 
   // fog: city depth in the HQ shot, lighter in the network space
@@ -379,6 +445,7 @@ function setState(t) {
     converge,
     core: inNet ? ease.inCubic(prog(t, 12.75, T.cut2)) * 1.0 : 0,
   });
+  datascape.update(t, { visible: inNet && t > 6.2, converge, floor: inNet ? (1 - prog(t, 10.9, 12.0)) * prog(t, 6.4, 7.0) : 0 });
   const globeO = inNet ? ease.inOutSine(prog(t, 10.1, 11.2)) * (1 - prog(t, 12.55, 12.9)) : 0;
   const Hpx = renderer.getDrawingBufferSize(new THREE.Vector2()).y;
   globe.update(t, { opacity: globeO, scale: Hpx * 0.5 / Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) });
@@ -396,13 +463,27 @@ function setState(t) {
   post.bloom.strength = inHQ ? 0.45 : inNet ? 0.62 : 0.55;
   post.bloom.threshold = inHQ ? 0.8 : 0.78;
   post.bloom.radius = 0.55;
+  // depth effects per environment
+  const focusDist = camera.position.distanceTo(targetRef);
+  post.dof.uFocus.value = focusDist;
+  if (inStage) {
+    post.ao.uAoRadius.value = 0.35; post.ao.uAoIntensity.value = 1.0;
+    post.dof.uAperture.value = final ? 4 : lerp(16, 5, prog(t, 0.2, 2.4)); post.dof.uMaxBlur.value = 16;
+  } else if (inHQ) {
+    post.ao.uAoRadius.value = 6; post.ao.uAoIntensity.value = 0.8;
+    post.dof.uAperture.value = 3; post.dof.uMaxBlur.value = 10;
+  } else {
+    post.ao.uAoRadius.value = 1.2; post.ao.uAoIntensity.value = 0.6;
+    post.dof.uAperture.value = lerp(6, 2.5, prog(t, 10.0, 10.8)); post.dof.uMaxBlur.value = 12;
+  }
 }
 
 function subframesFor(t) {
   if (t >= T.dollyIn && t < T.cut1) return 5;
-  if (t >= T.pullStart + 0.3 && t < T.pullEnd - 0.4) return 3;
+  if (t >= 0.5 && t < 1.9) return 3;
+  if (t >= T.pullStart + 0.2 && t < T.pullEnd - 0.2) return 3; // through the frame tunnel
   if (t >= T.rushStart && t < T.cut2) return 5;
-  if (t >= T.cut1 && t < T.cut1 + 0.3) return 3;
+  if (t >= T.cut1 && t < 4.4) return 3; // crane passes through the colonnade
   return 1;
 }
 const SHUTTER = 0.5 / FPS; // 180° shutter

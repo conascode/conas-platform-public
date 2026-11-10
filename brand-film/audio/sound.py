@@ -264,6 +264,27 @@ shimmer *= env_adsr(T_END + 0.05, 0.25, 0.9) * 0.012
 FX += np.stack([shimmer, np.roll(shimmer, 900)]) * 1.6
 L += np.stack([shimmer, np.roll(shimmer, 900)])
 
+# 12. Mechanical layer for the denser picture
+# gear escapement ticks while the chamber lights up and the camera tracks through it (0.3 .. 2.9)
+for i in range(30):
+    tk = 0.32 + i * 0.087 + (0.012 if i % 2 else 0)
+    amp = 0.022 * min(1, i / 6) * (0.6 if i % 2 else 1.0)
+    click = fft_filter(noise(), lo=1800, hi=9000) * env_adsr(tk, 0.0004, 0.004)
+    ring_ = metal_hit(tk, 1900 + (i % 3) * 230, 1.0, decay=0.05, partials=(1.0, 2.31, 3.97), seed=100 + i)
+    L += pan(click * amp * 3 + ring_ * amp * 0.6, 0.35 if i % 2 else -0.35)
+# low mechanical hum of the gear train
+mech = (np.sin(2 * np.pi * 61.0 * t) * 0.5 + np.sin(2 * np.pi * 122.5 * t) * 0.25) * (0.5 + 0.5 * np.sin(2 * np.pi * 11.5 * t))
+L += pan(mech * 0.02 * ramp(0, 1, 0.2, 1.2) * (1 - ramp(0, 1, 2.9, 3.2)), 0)
+L += pan(mech * 0.012 * ramp(0, 1, 13.2, 13.8) * (1 - ramp(0, 1, 14.4, 15.0)), 0)
+# passing whooshes: colonnade (3.45 .. 3.95) and frame tunnel (10.4 .. 11.6)
+def pass_by(tc, width, amp, pan_from):
+    e = np.exp(-((t - tc) / width) ** 2)
+    w = onepole_lp(noise(), 300 + 3500 * e) * e * amp
+    return pan(w, np.clip((t - tc) / (width * 2), -1, 1) * pan_from)
+L += pass_by(3.55, 0.09, 0.07, -0.8) + pass_by(3.78, 0.08, 0.06, 0.8)
+for i, tc in enumerate([10.55, 10.8, 11.02, 11.22, 11.4, 11.56]):
+    L += pass_by(tc, 0.06, 0.035, 0.7 if i % 2 else -0.7)
+
 # ---------------------------------------------------------------- mix
 ir = reverb_ir(3.2, 0.85, seed=99)
 wet = np.stack([convolve(FX[0], ir[0]), convolve(FX[1], ir[1])])

@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { rng } from './util.js';
 import { COLORS } from './materials.js';
 import { createSymbol } from './symbol.js';
+import { lightBeam, columnGeometry, flatRing } from './machinery.js';
 
 export const TOWER = {
   half: 16,          // half width of the shaft footprint
@@ -103,6 +104,8 @@ export function createBuilding(lib) {
           totalEmissiveRadiance += uBlue * 0.012 * arFront * uDataGlow;
           float arEdge = 1.0 - smoothstep(0.0, 0.012, arDV - uDissolve);
           totalEmissiveRadiance += uBlue * arEdge * arLine * step(0.001, uDissolve) * 1.4;
+          float arScan = abs(vArPos.y - (uSweepY + 18.0));
+          totalEmissiveRadiance += uBlue * (1.0 - smoothstep(0.0, 0.35, arScan)) * uSweepAmt * 1.6;
           float arSw = (vArPos.y - uSweepY);
           totalEmissiveRadiance += vec3(0.70, 0.78, 0.90) * exp(-arSw * arSw / 40.0) * uSweepAmt * (0.12 + arLine * 0.45);
           totalEmissiveRadiance += vec3(0.50, 0.58, 0.72) * exp(-max(vArPos.y, 0.0) / 16.0) * uUplight * 0.22;`);
@@ -200,6 +203,46 @@ export function createBuilding(lib) {
   // Entrance columns.
   for (let i = -2; i <= 2; i++) box(0.7, 8.2, 0.7, i * 8.5, 0.8, 28.5, finMat);
 
+  // ---------- monumental colonnade ring around the plaza (the crane passes through it) ----------
+  const COL_R = 66, COL_N = 28, COL_H = 34;
+  const colMat = arch(lib.brushedFrame(), { cellW: 4, floorH: 4 });
+  const columns = new THREE.InstancedMesh(columnGeometry(1.5, COL_H, 16), colMat, COL_N);
+  const bases = new THREE.InstancedMesh(new THREE.BoxGeometry(4.2, 1.6, 4.2), marble, COL_N);
+  const caps = new THREE.InstancedMesh(new THREE.BoxGeometry(4.0, 1.2, 4.0), colMat, COL_N);
+  const colLights = new THREE.InstancedMesh(new THREE.BoxGeometry(0.12, COL_H - 6, 0.12), new THREE.MeshBasicMaterial({ color: new THREE.Color('#a9bdd8').multiplyScalar(1.3), toneMapped: false }), COL_N);
+  for (let i = 0; i < COL_N; i++) {
+    const a = ((i + 0.5) / COL_N) * Math.PI * 2;
+    const x = Math.sin(a) * COL_R, z = Math.cos(a) * COL_R;
+    tmp.rotation.set(0, a, 0); tmp.scale.set(1, 1, 1);
+    tmp.position.set(x, 0.8, z); tmp.updateMatrix(); columns.setMatrixAt(i, tmp.matrix);
+    tmp.position.set(x, 0.8, z); tmp.updateMatrix(); bases.setMatrixAt(i, tmp.matrix);
+    tmp.position.set(x, COL_H + 0.8 + 0.6, z); tmp.updateMatrix(); caps.setMatrixAt(i, tmp.matrix);
+    tmp.position.set(Math.sin(a) * (COL_R - 1.55), 0.8 + COL_H / 2, Math.cos(a) * (COL_R - 1.55)); tmp.updateMatrix(); colLights.setMatrixAt(i, tmp.matrix);
+  }
+  [columns, bases, caps].forEach((m) => { m.castShadow = true; m.receiveShadow = true; });
+  group.add(columns, bases, caps, colLights);
+  // architrave ring on top of the columns
+  const architrave = new THREE.Mesh(flatRing(COL_R + 2.6, COL_R - 2.6, 2.4, { segments: 192, bevel: 0.15 }), colMat);
+  architrave.rotation.x = -Math.PI / 2;
+  architrave.position.y = COL_H + 0.8 + 1.2 + 1.2;
+  architrave.castShadow = true;
+  group.add(architrave);
+  const archLine = new THREE.Mesh(flatRing(COL_R - 2.4, COL_R - 2.55, 0.1, { segments: 192, bevel: 0 }), new THREE.MeshBasicMaterial({ color: new THREE.Color('#4A8DFF').multiplyScalar(1.6), toneMapped: false }));
+  archLine.rotation.x = -Math.PI / 2;
+  archLine.position.y = COL_H + 0.7;
+  group.add(archLine);
+
+  // ---------- searchlights from the podium corners, grazing the tower ----------
+  const beams = [];
+  for (let i = 0; i < 4; i++) {
+    const a = Math.PI / 4 + (i * Math.PI) / 2;
+    const b = lightBeam(320, 0.6, 14, '#bfd0ea', 0.11);
+    b.position.set(Math.sin(a) * 27, 11.5, Math.cos(a) * 27);
+    b.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), new THREE.Vector3(Math.sin(a) * 0.08, 1, Math.cos(a) * 0.08).normalize());
+    group.add(b);
+    beams.push(b);
+  }
+
   // ---------- ground ----------
   const groundTex = lib.textures.marble.clone();
   groundTex.needsUpdate = true;
@@ -215,19 +258,19 @@ export function createBuilding(lib) {
   const R = rng(4242);
   const cityGeo = new THREE.BoxGeometry(1, 1, 1);
   cityGeo.translate(0, 0.5, 0);
-  const city = new THREE.InstancedMesh(cityGeo, cityGlass, 140);
+  const city = new THREE.InstancedMesh(cityGeo, cityGlass, 420);
   let ci = 0;
-  for (let gx = -7; gx <= 7; gx++) {
-    for (let gz = -7; gz <= 7; gz++) {
-      const x = gx * 62 + (R() - 0.5) * 20, z = gz * 62 + (R() - 0.5) * 20;
+  for (let gx = -13; gx <= 13; gx++) {
+    for (let gz = -13; gz <= 13; gz++) {
+      const x = gx * 44 + (R() - 0.5) * 14, z = gz * 44 + (R() - 0.5) * 14;
       const d = Math.hypot(x, z);
-      if (d < 95 || d > 460 || ci >= 140) continue;
-      if (R() < 0.3) continue;
+      if (d < 100 || d > 620 || ci >= 420) continue;
+      if (R() < 0.18) continue;
       const near = 1 - Math.min(1, (d - 95) / 360);
-      const h = 30 + R() * 90 + near * 40;
+      const h = 30 + R() * 90 + near * 40 + (d < 280 && R() < 0.45 ? 70 + R() * 90 : 0);
       tmp.position.set(x, 0, z);
       tmp.rotation.set(0, 0, 0);
-      tmp.scale.set(20 + R() * 18, h, 20 + R() * 18);
+      tmp.scale.set(16 + R() * 16, h, 16 + R() * 16);
       tmp.updateMatrix();
       city.setMatrixAt(ci++, tmp.matrix);
     }
@@ -270,6 +313,48 @@ export function createBuilding(lib) {
   plate.visible = false; // signage sits directly on the crown glass
   group.add(logo);
 
+  // ---------- haze layers the crane rises through (soft cloud cards, seeded fbm) ----------
+  const cloudTex = (() => {
+    const S = 256, c = document.createElement('canvas'); c.width = c.height = S;
+    const g = c.getContext('2d'); const img = g.createImageData(S, S); const RC = rng(77);
+    const G = 32, grid = new Float32Array(G * G); for (let i = 0; i < grid.length; i++) grid[i] = RC();
+    const vn = (x, y) => { const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi; const sm = (a) => a * a * (3 - 2 * a);
+      const at = (i, j) => grid[((j % G) + G) % G * G + ((i % G) + G) % G];
+      const a = at(xi, yi), b = at(xi + 1, yi), cc = at(xi, yi + 1), d = at(xi + 1, yi + 1);
+      return a + (b - a) * sm(xf) + (cc - a) * sm(yf) + (a - b - cc + d) * sm(xf) * sm(yf); };
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      let n = 0, amp = 0.5, f = 4 / S; for (let o = 0; o < 5; o++) { n += vn(x * f * 8, y * f * 8) * amp; amp *= 0.5; f *= 2; }
+      const dx = x / S - 0.5, dy = y / S - 0.5; const fall = Math.max(0, 1 - Math.sqrt(dx * dx + dy * dy) * 2);
+      const a = Math.max(0, n - 0.35) * 2.2 * fall * fall;
+      const i = (y * S + x) * 4; img.data[i] = img.data[i + 1] = img.data[i + 2] = 255; img.data[i + 3] = Math.min(255, a * 255);
+    }
+    g.putImageData(img, 0, 0); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+  })();
+  const clouds = new THREE.Group();
+  const RCl = rng(1234);
+  for (let i = 0; i < 46; i++) {
+    const a = RCl() * Math.PI * 2, rad = 30 + RCl() * 240;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: cloudTex, color: new THREE.Color('#6f7f96'), transparent: true, opacity: 0.16 + RCl() * 0.14, depthWrite: false, fog: true }));
+    sp.position.set(Math.sin(a) * rad, 95 + RCl() * 110, Math.cos(a) * rad);
+    sp.scale.set(70 + RCl() * 90, 26 + RCl() * 20, 1);
+    sp.material.rotation = (RCl() - 0.5) * 0.3;
+    clouds.add(sp);
+  }
+  group.add(clouds);
+
+  // ---------- crown mast with aircraft warning lights ----------
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.9, 34, 12), finMat);
+  mast.position.set(0, TOWER.crownTop + 17, 0);
+  mast.castShadow = true;
+  group.add(mast);
+  const mastLights = [];
+  for (let i = 0; i < 3; i++) {
+    const l = new THREE.Mesh(new THREE.SphereGeometry(0.45, 12, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color('#dfe9ff').multiplyScalar(3), toneMapped: false }));
+    l.position.set(0, TOWER.crownTop + 8 + i * 12, 0.5);
+    group.add(l);
+    mastLights.push(l);
+  }
+
   // ---------- night sky dome ----------
   const sky = new THREE.Mesh(new THREE.SphereGeometry(1400, 48, 24), new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, fog: false,
@@ -285,5 +370,5 @@ export function createBuilding(lib) {
   }));
   group.add(sky);
 
-  return { group, uniforms: U, logo, logoSymbol: sym, textMat, plate, sky, ground, city };
+  return { group, uniforms: U, logo, logoSymbol: sym, textMat, plate, sky, ground, city, beams, plaza: [columns, bases, caps, colLights, architrave, archLine], clouds, mastLights };
 }

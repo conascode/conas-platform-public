@@ -38,7 +38,7 @@ function pointsMaterial(map) {
       uniform float uScale; varying float vA; varying vec3 vC;
       void main(){
         vec4 mv = modelViewMatrix * vec4(position, 1.0);
-        gl_PointSize = max(1.0, aSize * uScale / -mv.z);
+        gl_PointSize = clamp(aSize * uScale / -mv.z, 1.0, 48.0);
         vA = aAlpha * clamp(gl_PointSize / 1.5, 0.0, 1.0); vC = aColor;
         gl_Position = projectionMatrix * mv;
       }`,
@@ -205,18 +205,38 @@ export function createNetwork(lib, labelsEl) {
   // ---------- data floor: fine grid fading with distance ----------
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false,
-    uniforms: { uOpacity: { value: 0 }, uColor: { value: COLORS.blue.clone() }, uReveal: { value: 0 } },
+    uniforms: { uOpacity: { value: 0 }, uColor: { value: COLORS.blue.clone() }, uReveal: { value: 0 }, uT: { value: 0 }, uCyan: { value: COLORS.cyan.clone() } },
     vertexShader: `varying vec2 vP; void main(){ vP = position.xy; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
-    fragmentShader: `varying vec2 vP; uniform float uOpacity, uReveal; uniform vec3 uColor;
+    fragmentShader: `varying vec2 vP; uniform float uOpacity, uReveal, uT; uniform vec3 uColor, uCyan;
+      float h21(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
       float grid(vec2 p, float s, float w){ vec2 g = abs(fract(p/s - 0.5) - 0.5) / fwidth(p/s); return 1.0 - min(min(g.x, g.y) / w, 1.0); }
+      float line(float x, float w){ float f = abs(fract(x) - 0.5) * 2.0; return 1.0 - smoothstep(0.0, w, f * 0.5 - 0.0) ; }
+      // circuit traces: rows/columns every 1.5 units, each run switched on per 12-unit block
+      vec2 traces(vec2 p){
+        float s = 1.5;
+        vec2 q = p / s;
+        float rowOn = step(0.55, h21(vec2(floor(q.y), floor(p.x / 12.0))));
+        float colOn = step(0.62, h21(vec2(floor(p.y / 12.0) + 41.0, floor(q.x))));
+        float wy = abs(fract(q.y) - 0.5) * s, wx = abs(fract(q.x) - 0.5) * s;
+        float aa = fwidth(p.x) + fwidth(p.y);
+        float tr = max(rowOn * (1.0 - smoothstep(0.035, 0.035 + aa, wy)), colOn * (1.0 - smoothstep(0.035, 0.035 + aa, wx)));
+        // pulses travelling along the runs
+        float pr = rowOn * (1.0 - smoothstep(0.06, 0.06 + aa, wy)) * smoothstep(0.93, 1.0, fract(p.x / 14.0 - uT * 0.45 + h21(vec2(floor(q.y), 3.0))));
+        float pc = colOn * (1.0 - smoothstep(0.06, 0.06 + aa, wx)) * smoothstep(0.93, 1.0, fract(p.y / 14.0 - uT * 0.4 + h21(vec2(floor(q.x), 9.0))));
+        // pads at crossings
+        vec2 cc = abs(fract(q) - 0.5) * s;
+        float pad = rowOn * colOn * (1.0 - smoothstep(0.12, 0.12 + aa, max(cc.x, cc.y)));
+        return vec2(tr + pad, max(pr, pc));
+      }
       void main(){
         float d = length(vP);
-        float fine = grid(vP, 2.0, 1.0) * 0.35;
-        float major = grid(vP, 10.0, 1.2) * 0.9;
-        float fade = exp(-d * 0.028);
+        float major = grid(vP, 12.0, 1.0) * 0.5;
+        vec2 tc = traces(vP);
+        float fade = exp(-d * 0.022);
         float reveal = 1.0 - smoothstep(uReveal - 12.0, uReveal, d);
-        float a = (fine + major) * fade * reveal * uOpacity;
-        gl_FragColor = vec4(uColor * a, a);
+        float a = (tc.x * 0.45 + major) * fade * reveal * uOpacity;
+        vec3 col = uColor * a + uCyan * tc.y * 1.5 * fade * reveal * uOpacity;
+        gl_FragColor = vec4(col, a + tc.y * fade * reveal * uOpacity);
       }`,
   }));
   floor.rotation.x = -Math.PI / 2;
@@ -280,6 +300,9 @@ export function createNetwork(lib, labelsEl) {
       const yaw = Math.atan2(v.x, v.z);
       const pitch = Math.atan2(v.y, Math.hypot(v.x, v.z)) * 0.55;
       n.inner.rotation.set(-pitch, yaw, 0, 'YXZ');
+      const ux = ease.outCubic(prog(t, n.appear, n.appear + 0.32));
+      const uy = ease.inOutCubic(prog(t, n.appear + 0.18, n.appear + 0.5));
+      n.inner.scale.set(Math.max(0.01, ux), Math.max(0.04, uy), 1);
 
       n.glassMat.opacity = n.baseGlassOpacity * vis;
       n.frameMat.opacity = vis;
@@ -303,7 +326,7 @@ export function createNetwork(lib, labelsEl) {
       }
 
       // Label: project panel center (+offset) and fit text to panel width.
-      const la = clamp(prog(t, n.appear + 0.12, n.appear + 0.5) * state.labelAlpha * (1 - prog(conv, 0, 0.25)));
+      const la = clamp(prog(t, n.appear + 0.42, n.appear + 0.75) * state.labelAlpha * (1 - prog(conv, 0, 0.25)));
       if (la > 0.002 && n.group.visible) {
         const yOff = n.tier === 0 ? -0.95 : -0.05;
         const left = new THREE.Vector3(-n.w / 2, yOff, 0.1), right = new THREE.Vector3(n.w / 2, yOff, 0.1);
@@ -393,12 +416,13 @@ export function createNetwork(lib, labelsEl) {
     dGeo.attributes.position.needsUpdate = true;
     dGeo.attributes.aAlpha.needsUpdate = true;
 
-    floor.material.uniforms.uOpacity.value = 0.55 * prog(t, 6.4, 7.0) * (1 - prog(t, 10.6, 11.8)) * (1 - conv);
+    floor.material.uniforms.uOpacity.value = 0.6 * prog(t, 6.4, 7.0) * (1 - prog(t, 10.9, 12.0)) * (1 - conv);
     floor.material.uniforms.uReveal.value = lerp(0, 160, ease.outCubic(prog(t, 6.4, 8.0)));
+    floor.material.uniforms.uT.value = t;
 
     core.material.opacity = state.core;
     core.scale.setScalar(lerp(2, 9, state.core));
   }
 
-  return { group, nodes, byId, update, edges, expansions };
+  return { group, nodes, byId, update, edges, expansions, floor };
 }
