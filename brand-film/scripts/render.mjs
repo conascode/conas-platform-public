@@ -45,16 +45,17 @@ function run(cmd, argv, opts = {}) {
 async function openPage(browser, url) {
   const ctx = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: scale });
   const page = await ctx.newPage();
+  page.setDefaultTimeout(0); // heavy frames (5 motion-blur sub-frames at 1080p) can take minutes
   page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') console.log('[page]', m.text()); });
   page.on('pageerror', (e) => console.log('[pageerror]', e.message));
   await page.goto(url);
-  await page.waitForFunction(() => window.FILM && window.FILM.isReady === true, null, { timeout: 120000 });
+  await page.waitForFunction(() => window.FILM && window.FILM.isReady === true, null, { timeout: 600000 });
   return page;
 }
 
 async function renderFrame(page, f) {
   await page.evaluate((n) => window.FILM.renderFrame(n), f);
-  return page.screenshot({ type: 'png', clip: { x: 0, y: 0, width: W, height: H } });
+  return page.screenshot({ type: 'png', clip: { x: 0, y: 0, width: W, height: H }, timeout: 0 });
 }
 
 const server = await startServer();
