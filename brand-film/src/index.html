@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CONAS Brand Film</title>
+<link rel="stylesheet" href="/node_modules/@fontsource/noto-sans-kr/400.css">
+<link rel="stylesheet" href="/node_modules/@fontsource/noto-sans-kr/500.css">
+<link rel="stylesheet" href="/src/film.css">
+<script type="importmap">
+{ "imports": {
+    "three": "/node_modules/three/build/three.module.js",
+    "three/addons/": "/node_modules/three/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="stage">
+  <canvas id="gl"></canvas>
+  <div id="labels"></div>
+
+  <!-- Scene 01 / Scene 05 signature lockup -->
+  <div class="lockup" id="lockup">
+    <div class="brand" id="lk-brand">CONAS</div>
+    <div class="rule" id="lk-rule"></div>
+    <div class="sub" id="lk-sub">HOLDINGS</div>
+    <div class="line" id="lk-line">BUILDING WHAT COMES NEXT.</div>
+  </div>
+
+  <!-- Scene 02 -->
+  <div class="caption" id="cap-hq"><span class="tick"></span><span class="txt">A FOUNDATION FOR THE FUTURE.</span></div>
+
+  <!-- Scene 04 -->
+  <div class="caption two" id="cap-net">
+    <div class="row" id="cap-net-1"><span class="tick"></span><span class="txt">CONNECTED BY VISION.</span></div>
+    <div class="row" id="cap-net-2"><span class="tick"></span><span class="txt">DRIVEN BY INNOVATION.</span></div>
+  </div>
+</div>
+<script type="module" src="/src/film.js"></script>
+</body>
+</html>

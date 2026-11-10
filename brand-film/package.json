@@ -1,0 +1,16 @@
+{
+  "name": "conas-brand-film",
+  "private": true,
+  "version": "1.0.0",
+  "description": "CONAS HOLDINGS corporate brand film (15s, 1920x1080, 30fps) rendered with Three.js",
+  "type": "module",
+  "scripts": {
+    "audio": "python3 audio/sound.py output/CONAS_audio.wav",
+    "preview": "node scripts/render.mjs --preview",
+    "render": "node scripts/render.mjs"
+  },
+  "dependencies": {
+    "three": "0.170.0",
+    "@fontsource/noto-sans-kr": "5.1.1"
+  }
+}

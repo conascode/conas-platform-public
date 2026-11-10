@@ -1,0 +1,55 @@
+:root {
+  --bg: #05070B;
+  --bg2: #0A101A;
+  --text: #F3F5F7;
+  --silver: #AEB8C4;
+  --blue: #4A8DFF;
+  --cyan: #54D9E8;
+}
+html, body { margin: 0; padding: 0; background: var(--bg); overflow: hidden; }
+#stage {
+  position: relative; width: 1920px; height: 1080px; overflow: hidden; background: var(--bg);
+  font-family: "Inter Display", "Inter", "Noto Sans KR", sans-serif; color: var(--text);
+  -webkit-font-smoothing: antialiased; text-rendering: geometricPrecision;
+}
+#gl { position: absolute; inset: 0; width: 1920px; height: 1080px; display: block; }
+#labels { position: absolute; inset: 0; pointer-events: none; }
+
+/* ---------- lockup (scene 01 + 05) ---------- */
+.lockup {
+  position: absolute; left: 0; right: 0; top: 640px; text-align: center; opacity: 0;
+}
+.lockup .brand {
+  font-weight: 300; font-size: 112px; line-height: 1; letter-spacing: 0.34em; padding-left: 0.34em;
+  background: linear-gradient(180deg, #FFFFFF 0%, #E4E9EF 45%, #AEB8C4 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.lockup .rule {
+  width: 72px; height: 1px; margin: 34px auto 0; background: linear-gradient(90deg, transparent, #AEB8C4, transparent);
+}
+.lockup .sub {
+  margin-top: 26px; font-weight: 400; font-size: 23px; letter-spacing: 0.9em; padding-left: 0.9em; color: var(--silver);
+}
+.lockup .line {
+  margin-top: 54px; font-weight: 400; font-size: 21px; letter-spacing: 0.5em; padding-left: 0.5em; color: #AEB8C4; opacity: 0;
+}
+
+/* ---------- captions (scene 02 + 04) ---------- */
+.caption {
+  position: absolute; left: 150px; bottom: 132px; opacity: 0;
+  font-weight: 400; font-size: 30px; letter-spacing: 0.36em; color: var(--text);
+  display: flex; align-items: center; gap: 28px;
+}
+.caption .tick { display: inline-block; width: 46px; height: 1px; background: var(--blue); opacity: 0.9; }
+.caption.two { display: block; }
+.caption.two .row { display: flex; align-items: center; gap: 28px; opacity: 0; }
+.caption.two .row + .row { margin-top: 22px; }
+
+/* ---------- network labels (scene 03 / 04) ---------- */
+.nlabel {
+  position: absolute; left: 0; top: 0; white-space: nowrap; transform-origin: 0 0; will-change: transform;
+  text-align: center; color: var(--text); opacity: 0;
+}
+.nlabel .nm { display: block; font-weight: 500; letter-spacing: 0.13em; padding-left: 0.13em; line-height: 1; }
+.nlabel.ko .nm { font-family: "Noto Sans KR", sans-serif; letter-spacing: 0.08em; padding-left: 0.08em; font-weight: 500; }
+.nlabel.root .nm { font-weight: 400; letter-spacing: 0.24em; padding-left: 0.24em; }

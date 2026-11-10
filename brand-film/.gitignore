@@ -1,0 +1,6 @@
+node_modules/
+output/stills/
+output/preview/
+output/segments/
+output/render.log
+output/segments/
