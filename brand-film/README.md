@@ -11,6 +11,11 @@ brand-film/
   src/            film source (Three.js, runs in a browser page)
     film.js       single timeline: camera, scene states, text, post (FILM.renderFrame(n))
     symbol.js     CONAS mark (segmented titanium C, chrome inner arc, silver core)
+    machinery.js  procedural parts: meshing gear trains, rings, bearings, pistons, lenses,
+                  prisms, glass, data-cube fields, volumetric beams, columns
+    chamber.js    scenes 01/05 core chamber (gear walls, bezel rings, dial, optics, columns)
+    datascape.js  scenes 03/04 data space (circuit floor, chips, fibre optics, cubes,
+                  server towers, frame tunnel, armillary rings)
     building.js   headquarters tower, podium, city, rooftop signage, glass-to-data dissolve
     network.js    group structure network (panels, edges, data pulses, labels)
     globe.js      abstract globe for scene 04 (no real geography or place names)
@@ -26,11 +31,15 @@ brand-film/
 
 | Time | Scene | Content |
 |---|---|---|
-| 0.0–3.2 | 01 The Emergence | light point, metal particles, the mark assembles, CONAS / HOLDINGS |
-| 3.2–6.3 | 02 The Headquarters | crane up the tower, rooftop sign, "A FOUNDATION FOR THE FUTURE." |
-| 6.0–10.0 | 03 The Ecosystem | façade dissolves into data space; CONAS HOLDINGS → CONAS INVESTMENT, CELLEXIS → PRECISEON CHAIN, ALLX ACADEMY → 서현학원 → 오름스터디카페 |
-| 10.0–12.5 | 04 The Network | pull back, abstract globe, "CONNECTED BY VISION. / DRIVEN BY INNOVATION." |
-| 12.5–15.0 | 05 The Signature | convergence, final impact, CONAS / HOLDINGS / BUILDING WHAT COMES NEXT., fade |
+| 0.0–3.2 | 01 The Emergence | macro dolly on meshing gears, track through bearings/optics, particles and rings assemble the mark on its dial, CONAS / HOLDINGS |
+| 3.2–6.3 | 02 The Headquarters | crane through a monumental colonnade and haze layers up the tower, searchlights, scan line, rooftop sign, "A FOUNDATION FOR THE FUTURE." |
+| 6.0–10.0 | 03 The Ecosystem | façade dissolves into a circuit-board data space; panels unfold in order; CONAS HOLDINGS → CONAS INVESTMENT, CELLEXIS → PRECISEON CHAIN, ALLX ACADEMY → 서현학원 → 오름스터디카페 |
+| 10.0–12.5 | 04 The Network | pull back through a frame tunnel, abstract globe with armillary rings, "CONNECTED BY VISION. / DRIVEN BY INNOVATION." |
+| 12.5–15.0 | 05 The Signature | everything converges, final impact, mark in the gear chamber, CONAS / HOLDINGS / BUILDING WHAT COMES NEXT., fade |
+
+Rendering features: image-based metal/glass reflections, transmission refraction with dispersion,
+shadow maps, depth-based ambient occlusion, depth of field, sub-frame motion blur, controlled bloom,
+fake volumetric beams, seeded film grain.
 
 ## Rendering
 
